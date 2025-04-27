@@ -102,9 +102,9 @@ class Detector:
         self.image_sub = rospy.Subscriber(
             "/camera/color/image_raw", Image, self.image_cb, queue_size=1, buff_size=2**24
             )
-        self.obj_id = {'wine': 46, 'bear': 88, 'clock': 85}
-        self.items = ['wine', 'bear', 'clock']
-        self.detector = SparkDetect(os.environ['HOME'] + "/auto.pt")
+        self.obj_id = {73: 'book', 41: 'cup'}
+        self.items = ['book', 'cup']
+        self.detector = SparkDetect(os.environ['HOME'] + "/yolov5n-seg.pt")
 
     def image_cb(self, data):
         objArray = Detection2DArray()
