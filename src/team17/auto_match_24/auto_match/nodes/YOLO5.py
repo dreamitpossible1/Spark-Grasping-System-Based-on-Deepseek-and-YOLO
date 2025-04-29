@@ -59,7 +59,7 @@ def detect_from_ros_camera(topic_name="/camera/rgb/image_raw"):
     # 创建CvBridge对象，用于将ROS图像转换为OpenCV图像
     bridge = CvBridge()
     
-    # 创建结果发布者（可选，用于发布检测结果）
+    # 创建结果发布者
     result_pub = rospy.Publisher('/yolo/detection_result', RosImage, queue_size=1)
     
     # 帧计数器
@@ -77,65 +77,48 @@ def detect_from_ros_camera(topic_name="/camera/rgb/image_raw"):
             # 将ROS图像转换为OpenCV图像
             cv_image = bridge.imgmsg_to_cv2(ros_image, "bgr8")
             latest_image = cv_image
+            
+            # 将OpenCV图像转换为PIL图像
+            img = Image.fromarray(cv2.cvtColor(latest_image, cv2.COLOR_BGR2RGB))
+            
+            # 执行推理
+            results = model(img)
+            
+            # 将结果渲染到图像上
+            img_with_boxes = np.array(results.render()[0])
+            
+            # 转回OpenCV格式
+            img_with_boxes = cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR)
+            
+            # 每隔30帧保存一次图像并显示检测结果
+            if frame_count % 30 == 0:
+                save_path = os.path.join(RESULTS_DIR, f"ros_camera_frame_{frame_count}.jpg")
+                cv2.imwrite(save_path, img_with_boxes)
+                print(f"ROS摄像头帧已保存到: {save_path}")
+                display_detection_details(results)
+            
+            # 发布结果图像
+            try:
+                result_msg = bridge.cv2_to_imgmsg(img_with_boxes, "bgr8")
+                result_pub.publish(result_msg)
+            except Exception as e:
+                print(f"发布结果图像时出错: {e}")
+                
         except Exception as e:
-            print(f"转换图像时出错: {e}")
+            print(f"处理图像时出错: {e}")
     
     # 订阅摄像头话题
     rospy.Subscriber(topic_name, RosImage, image_callback)
     
-    print("已开始接收ROS摄像头数据，按Ctrl+C退出...")
-    
-    # 创建窗口
-    cv2.namedWindow('YOLOv5 ROS Detection', cv2.WINDOW_NORMAL)
-    
-    rate = rospy.Rate(10)  # 10Hz
+    print("已开始接收ROS摄像头数据...")
+    print("检测结果将发布到话题: /yolo/detection_result")
+    print("你可以使用 rqt_image_view 来查看结果")
+    print("按Ctrl+C退出...")
     
     try:
-        while not rospy.is_shutdown():
-            if latest_image is not None:
-                # 将OpenCV图像转换为PIL图像
-                img = Image.fromarray(cv2.cvtColor(latest_image, cv2.COLOR_BGR2RGB))
-                
-                # 执行推理
-                results = model(img)
-                
-                # 将结果渲染到图像上
-                img_with_boxes = np.array(results.render()[0])
-                
-                # 转回OpenCV格式以显示
-                img_with_boxes = cv2.cvtColor(img_with_boxes, cv2.COLOR_RGB2BGR)
-                
-                # 显示结果
-                cv2.imshow('YOLOv5 ROS Detection', img_with_boxes)
-                
-                # 每隔30帧保存一次图像
-                if frame_count % 30 == 0:
-                    save_path = os.path.join(RESULTS_DIR, f"ros_camera_frame_{frame_count}.jpg")
-                    cv2.imwrite(save_path, img_with_boxes)
-                    print(f"ROS摄像头帧已保存到: {save_path}")
-                    
-                    # 显示检测结果的详细信息
-                    display_detection_details(results)
-                
-                # 尝试发布结果图像（可选）
-                try:
-                    result_msg = bridge.cv2_to_imgmsg(img_with_boxes, "bgr8")
-                    result_pub.publish(result_msg)
-                except Exception as e:
-                    print(f"发布结果图像时出错: {e}")
-            
-            # 按'q'退出
-            if cv2.waitKey(1) == ord('q'):
-                break
-                
-            rate.sleep()
-    
+        rospy.spin()
     except KeyboardInterrupt:
         print("用户中断，退出程序")
-    
-    finally:
-        cv2.destroyAllWindows()
-        print("已关闭ROS摄像头检测")
 
 # 主函数
 if __name__ == "__main__":
