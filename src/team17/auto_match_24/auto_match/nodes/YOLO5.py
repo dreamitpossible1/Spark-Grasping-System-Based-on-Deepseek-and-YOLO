@@ -8,14 +8,18 @@ from sensor_msgs.msg import Image as RosImage
 from cv_bridge import CvBridge
 
 # 加载模型
-model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+model_path = os.path.expanduser('~/yolov5s.pt')
+if not os.path.exists(model_path):
+    print(f"错误：模型文件不存在: {model_path}")
+    exit(1)
+model = torch.hub.load('ultralytics/yolov5', 'custom', path=model_path, source='local')
 
 # 查看模型支持的类别
 print("模型支持的类别:")
 print(model.names)
 
 # 设置固定的结果保存路径
-RESULTS_DIR = 'D:/CUHKSZ/course/Robot Manipulation/results'
+RESULTS_DIR = os.path.expanduser('~/Robot_manipulation/results')
 
 # 创建结果目录（如果不存在）
 def setup_results_dir():
