@@ -39,17 +39,6 @@ rostopic pub /swiftpro_status_topic swiftpro/status "status: 1" -1
 echo -e "\nTesting swiftpro status (detach)..."
 rostopic pub /swiftpro_status_topic swiftpro/status "status: 0" -1
 
-# Test gripper control (close)
-echo -e "\nTesting gripper control (close)..."
-rostopic pub /gripper_topic swiftpro/status "status: 1" -1
-
-# Wait 2 seconds
-sleep 2
-
-# Test gripper control (open)
-echo -e "\nTesting gripper control (open)..."
-rostopic pub /gripper_topic swiftpro/status "status: 0" -1
-
 # Test individual motor angles
 echo -e "\nTesting motor 1 angle control (45 degrees)..."
 rostopic pub /angle1st_topic swiftpro/angle1st "angle1st: 45.0" -1

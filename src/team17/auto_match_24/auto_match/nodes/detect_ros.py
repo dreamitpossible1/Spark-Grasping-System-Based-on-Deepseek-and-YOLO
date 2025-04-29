@@ -100,7 +100,7 @@ class Detector:
         self.object_pub = rospy.Publisher("/objects", Detection2DArray, queue_size=1)
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber(
-            "/camera/color/image_raw", Image, self.image_cb, queue_size=1, buff_size=2**24
+            "/camera/rgb/image_raw", Image, self.image_cb, queue_size=1, buff_size=2**24
             )
         self.obj_id = {73: 'book', 41: 'cup'}
         self.items = ['book', 'cup']
