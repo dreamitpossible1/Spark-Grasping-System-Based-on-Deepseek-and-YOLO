@@ -61,6 +61,30 @@ class SparkDetect:
         if self.model is None:
             rospy.logerr("模型未初始化，无法进行检测")
             return None
+
+        # 输入图像合法性检查
+        if image is None or not hasattr(image, 'shape'):
+            rospy.logerr("输入图像无效: 图像为空或没有shape属性")
+            return self.__results__()
+
+        # 检查图像维度和类型
+        if len(image.shape) != 3:
+            rospy.logerr(f"输入图像维度错误: 期望3维(HxWxC), 实际为{len(image.shape)}维")
+            return self.__results__()
+
+        if image.shape[2] != 3:
+            rospy.logerr(f"输入图像通道数错误: 期望3通道(RGB), 实际为{image.shape[2]}通道")
+            return self.__results__()
+
+        try:
+            # 确保图像数据类型正确
+            if image.dtype != 'uint8':
+                rospy.logwarn(f"输入图像类型为{image.dtype}, 尝试转换为uint8")
+                image = image.astype('uint8')
+        except Exception as e:
+            rospy.logerr(f"图像类型转换失败: {str(e)}")
+            return self.__results__()
+
         '''
         检测图像中的物体
         :param image: 输入图像
@@ -76,7 +100,9 @@ class SparkDetect:
         result.image = image.copy()  # 保存原始图像的副本
 
         try:
+            rospy.logdebug(f"开始推理, 输入图像形状: {image.shape}, 类型: {image.dtype}")
             results = self.model(image, augment=True)
+            rospy.logdebug(f"模型推理完成, 结果形状: {results.xyxy[0].shape}")
             
             # 遍历检测结果
             for *xyxy, conf, cls in results.xyxy[0]:
@@ -105,7 +131,11 @@ class SparkDetect:
                 result.confidence.append(float(conf))
 
         except Exception as e:
-            rospy.logerr(f"检测过程发生错误: {str(e)}")
+            rospy.logerr(f"检测过程发生错误: {type(e).__name__}")
+            rospy.logerr(f"错误详细信息: {str(e)}")
+            rospy.logerr(f"图像形状: {image.shape if image is not None else 'None'}")
+            import traceback
+            rospy.logerr(f"堆栈跟踪:\n{traceback.format_exc()}")
             # 即使发生错误，也返回带有原始图像的结果对象
             pass
 
