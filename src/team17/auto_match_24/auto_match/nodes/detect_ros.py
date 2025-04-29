@@ -205,7 +205,7 @@ class Detector:
         self.bridge = CvBridge()
         
         try:
-            self.detector = SparkDetect(os.environ['HOME'] + "/yolov5n-seg.pt")
+            self.detector = SparkDetect(os.environ['HOME'] + "/yolov5s.pt")
         except Exception as e:
             rospy.logerr(f"初始化检测器失败: {e}")
             raise
