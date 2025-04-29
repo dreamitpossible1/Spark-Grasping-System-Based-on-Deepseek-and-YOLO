@@ -35,10 +35,40 @@ class SparkDetect:
         :param model_path: YOLOv5模型文件路径
         '''
         self.model = None
+        # COCO数据集的80个类别
+        self.coco_names = {
+            0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane', 5: 'bus', 
+            6: 'train', 7: 'truck', 8: 'boat', 9: 'traffic light', 10: 'fire hydrant', 
+            11: 'stop sign', 12: 'parking meter', 13: 'bench', 14: 'bird', 15: 'cat', 
+            16: 'dog', 17: 'horse', 18: 'sheep', 19: 'cow', 20: 'elephant', 21: 'bear', 
+            22: 'zebra', 23: 'giraffe', 24: 'backpack', 25: 'umbrella', 26: 'handbag', 
+            27: 'tie', 28: 'suitcase', 29: 'frisbee', 30: 'skis', 31: 'snowboard', 
+            32: 'sports ball', 33: 'kite', 34: 'baseball bat', 35: 'baseball glove', 
+            36: 'skateboard', 37: 'surfboard', 38: 'tennis racket', 39: 'bottle', 
+            40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 45: 'bowl', 
+            46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 50: 'broccoli', 
+            51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 55: 'cake', 
+            56: 'chair', 57: 'couch', 58: 'potted plant', 59: 'bed', 60: 'dining table', 
+            61: 'toilet', 62: 'tv', 63: 'laptop', 64: 'mouse', 65: 'remote', 
+            66: 'keyboard', 67: 'cell phone', 68: 'microwave', 69: 'oven', 70: 'toaster', 
+            71: 'sink', 72: 'refrigerator', 73: 'book', 74: 'clock', 75: 'vase', 
+            76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'
+        }
+        
         try:
             rospy.loginfo(f"尝试加载模型: {model_path}")
             self.model = yolov5.load(model_path)
             rospy.loginfo("模型加载成功")
+            
+            # 检查并修正模型的类别映射
+            if hasattr(self.model.model, 'names') and self.model.model.names:
+                if len(self.model.model.names) != len(self.coco_names):
+                    rospy.logwarn(f"模型类别数量({len(self.model.model.names)})与COCO类别数量({len(self.coco_names)})不匹配")
+                    rospy.loginfo("使用标准COCO类别映射替换模型类别映射")
+                    self.model.model.names = self.coco_names
+            else:
+                rospy.logwarn("模型没有类别映射，使用标准COCO类别映射")
+                self.model.model.names = self.coco_names
             
             # 打印可用的类别ID信息
             available_classes = self.model.model.names
@@ -112,19 +142,20 @@ class SparkDetect:
         try:
             rospy.logdebug(f"开始推理, 输入图像形状: {image.shape}, 类型: {image.dtype}")
             results = self.model(image, augment=True)
-            rospy.logdebug(f"模型推理完成, 结果形状: {results.xyxy[0].shape}")
-            
-            # 输出可用的类别ID
-            available_classes = list(self.model.model.names.keys())
-            rospy.logdebug(f"模型支持的类别ID: {available_classes}")
+            detections = results.xyxy[0]  # 获取检测结果
+            rospy.logdebug(f"模型推理完成, 检测到{len(detections)}个目标")
             
             # 遍历检测结果
-            for *xyxy, conf, cls in results.xyxy[0]:
+            for *xyxy, conf, cls in detections:
                 try:
                     cls_id = int(cls)
-                    # 检查类别ID是否在可用范围内
-                    if cls_id not in self.model.model.names:
-                        rospy.logwarn(f"跳过未知类别ID: {cls_id}")
+                    # 检查类别ID是否在COCO类别范围内
+                    if cls_id not in self.coco_names:
+                        rospy.logwarn(f"跳过未知类别ID: {cls_id} (置信度: {conf:.2f})")
+                        continue
+                    
+                    if conf < 0.25:  # 添加置信度阈值
+                        rospy.logdebug(f"跳过低置信度检测: 类别={cls_id}, 置信度={conf:.2f}")
                         continue
                         
                     # 计算中心点坐标
