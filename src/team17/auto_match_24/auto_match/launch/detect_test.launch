@@ -10,12 +10,15 @@
 
     <!-- 启动检测节点 -->
     <node pkg="auto_match" name="detect_ros" type="detect_ros.py" output="screen">
-        <remap from="image" to="/camera/color/image_raw" if="$(eval arg('camera_type_tel')=='d435')"/>
-        <remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astrapro')"/>
-        <remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astra')"/>
+        <!-- 不需要remap，因为节点已经直接订阅 /camera/rgb/image_raw -->
     </node>
-	<!-- rviz -->
 
-	<node pkg="rviz" type="rviz" name="rviz" required="true" args="-d $(find auto_match)/rviz/auto_match.rviz"/>
+    <!-- rviz -->
+    <node pkg="rviz" type="rviz" name="rviz" required="true">
+        <!-- 添加默认配置以显示图像 -->
+        <param name="config" value="$(find auto_match)/rviz/detect_test.rviz" if="$(eval arg('camera_type_tel')=='astrapro')"/>
+    </node>
 
+    <!-- 启动图像查看器以便调试 -->
+    <node pkg="rqt_image_view" type="rqt_image_view" name="image_view" />
 </launch> 

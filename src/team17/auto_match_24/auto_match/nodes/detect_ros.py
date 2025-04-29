@@ -34,21 +34,33 @@ class SparkDetect:
         初始化YOLOv5检测器
         :param model_path: YOLOv5模型文件路径
         '''
+        self.model = None
         try:
+            rospy.loginfo(f"尝试加载模型: {model_path}")
             self.model = yolov5.load(model_path)
+            rospy.loginfo("模型加载成功")
         except Exception as e:
             rospy.logerr(f"加载模型失败:{e}, 开始下载")
             # 下载模型
             url = "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n-seg.pt"
             stat = os.system("wget " + url + " -O " + model_path)
-            if not (os.path.exists(model_path) or stat):
+            if not (os.path.exists(model_path) or stat == 0):
                 rospy.logerr("下载模型失败")
-                os.remove(model_path)
-                return
+                if os.path.exists(model_path):
+                    os.remove(model_path)
+                raise RuntimeError("模型加载和下载都失败")
             rospy.loginfo("下载模型成功")
-            self.model = yolov5.load(model_path)
+            try:
+                self.model = yolov5.load(model_path)
+                rospy.loginfo("下载的模型加载成功")
+            except Exception as e:
+                rospy.logerr(f"下载的模型加载失败: {e}")
+                raise
 
     def detect(self, image):
+        if self.model is None:
+            rospy.logerr("模型未初始化，无法进行检测")
+            return None
         '''
         检测图像中的物体
         :param image: 输入图像
@@ -96,19 +108,33 @@ class SparkDetect:
 
 class Detector:
     def __init__(self):
+        rospy.loginfo("初始化检测器...")
         self.image_pub = rospy.Publisher("result_image",Image, queue_size=1)
         self.object_pub = rospy.Publisher("/objects", Detection2DArray, queue_size=1)
         self.bridge = CvBridge()
+        
+        try:
+            self.detector = SparkDetect(os.environ['HOME'] + "/yolov5n-seg.pt")
+        except Exception as e:
+            rospy.logerr(f"初始化检测器失败: {e}")
+            raise
+            
+        # 等待一段时间确保相机已经准备好
+        rospy.sleep(2.0)
+        
+        # 订阅相机话题
         self.image_sub = rospy.Subscriber(
             "/camera/rgb/image_raw", Image, self.image_cb, queue_size=1, buff_size=2**24
-            )
-        self.obj_id = {73: 'book', 41: 'cup'}
+        )
+        rospy.loginfo("检测器初始化完成")
+        
+        self.obj_id = {'book': 73, 'cup': 41}  # 反转键值对以便查找
         self.items = ['book', 'cup']
-        self.detector = SparkDetect(os.environ['HOME'] + "/yolov5n-seg.pt")
 
     def image_cb(self, data):
         objArray = Detection2DArray()
         try:
+            rospy.logdebug(f"收到图像消息，时间戳: {data.header.stamp}")
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
             if cv_image is None:
                 rospy.logerr("Failed to convert image message to OpenCV image")
