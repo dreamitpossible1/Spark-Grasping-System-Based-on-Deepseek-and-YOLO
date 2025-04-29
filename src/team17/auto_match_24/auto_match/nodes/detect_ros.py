@@ -71,13 +71,14 @@ class SparkDetect:
                   result.confidence: 物体置信度列表
                   result.image: 检测后的图像
         '''
-        results = self.model(image, augment=True)
-
         # 存储检测结果的列表
         result = self.__results__()
+        result.image = image.copy()  # 保存原始图像的副本
 
-        # 遍历检测结果
         try:
+            results = self.model(image, augment=True)
+            
+            # 遍历检测结果
             for *xyxy, conf, cls in results.xyxy[0]:
                 # 计算中心点坐标
                 center_x = int((xyxy[0] + xyxy[2]) / 2)
@@ -85,22 +86,27 @@ class SparkDetect:
                 # 计算大小
                 size_x = int(xyxy[2] - xyxy[0])
                 size_y = int(xyxy[3] - xyxy[1])
+                
+                # 获取类别名称
+                class_name = self.model.model.names[int(cls)]
+                
                 # 绘制图像
-                label = f'{self.model.model.names[int(cls)]} ({center_x},{center_y})'
-                cv2.rectangle(image, (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3])), (0, 0, 255), 1)
-                cv2.putText(image, label, (int(xyxy[0]), int(xyxy[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 1)
-                cv2.circle(image, (center_x, center_y), 5, (255, 0, 0), -1)
+                label = f'{class_name} ({center_x},{center_y})'
+                cv2.rectangle(result.image, (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3])), (0, 0, 255), 1)
+                cv2.putText(result.image, label, (int(xyxy[0]), int(xyxy[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 1)
+                cv2.circle(result.image, (center_x, center_y), 5, (255, 0, 0), -1)
 
                 # 存储中心点坐标,物体名称,置信度和图像
                 result.size_x.append(size_x)
                 result.size_y.append(size_y)
-                result.name.append(self.model.model.names[int(cls)])
+                result.name.append(class_name)
                 result.x.append(center_x)
                 result.y.append(center_y)
                 result.confidence.append(float(conf))
 
-            result.image = image
-        except Exception as _:
+        except Exception as e:
+            rospy.logerr(f"检测过程发生错误: {str(e)}")
+            # 即使发生错误，也返回带有原始图像的结果对象
             pass
 
         return result
