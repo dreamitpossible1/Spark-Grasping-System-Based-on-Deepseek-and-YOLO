@@ -12,7 +12,9 @@ model_path = os.path.expanduser('~/yolov5s.pt')
 if not os.path.exists(model_path):
     print(f"错误：模型文件不存在: {model_path}")
     exit(1)
-model = torch.hub.load('ultralytics/yolov5', 'custom', path=model_path, source='local')
+
+import yolov5
+model = yolov5.load(model_path)
 
 # 查看模型支持的类别
 print("模型支持的类别:")
