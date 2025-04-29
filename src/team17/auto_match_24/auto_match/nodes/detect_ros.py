@@ -248,6 +248,22 @@ class Detector:
                     rospy.logerr("Detection returned None image")
                     return
 
+                # 添加检测结果的详细信息打印
+                if len(results.name) == 0:
+                    rospy.loginfo("未检测到任何物体")
+                else:
+                    rospy.loginfo(f"\n检测到 {len(results.name)} 个物体:")
+                    rospy.loginfo("-" * 50)
+                    rospy.loginfo(f"{'类别':<15}{'置信度':<10}{'坐标 (x, y)':<20}{'大小 (w, h)'}")
+                    rospy.loginfo("-" * 50)
+                    
+                    for i in range(len(results.name)):
+                        name = results.name[i]
+                        conf = results.confidence[i]
+                        x, y = results.x[i], results.y[i]
+                        w, h = results.size_x[i], results.size_y[i]
+                        rospy.loginfo(f"{name:<15}{conf:.2f}      ({x:>4}, {y:>4})      ({w:>4}, {h:>4})")
+
                 for i in range(len(results.name)):
                     if (results.name[i] not in self.items) or results.confidence[i] < 0.5:
                         continue
