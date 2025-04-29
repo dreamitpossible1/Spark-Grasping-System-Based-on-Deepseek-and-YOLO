@@ -206,19 +206,6 @@ class GraspObject(State):
                     index = i
                     xc = x_mid
                     yc = y_mid
-            
-            # 在原图上绘制检测到的最大轮廓和中心点
-            cv_image_debug = cv_image1.copy()
-            cv2.drawContours(cv_image_debug, [contours[index]], -1, (0,255,0), 2)
-            cv2.circle(cv_image_debug, (int(xc), int(yc)), 5, (0,0,255), -1)
-            cv2.imshow("4. Detected Object", cv_image_debug)
-            
-            # 打印位置和稳定性信息
-            print(f"Current position: ({xc:.1f}, {yc:.1f})")
-            print(f"Previous position: ({xc_prev:.1f}, {yc_prev:.1f})")
-            print(f"Position diff: dx={abs(xc-xc_prev):.1f}, dy={abs(yc-yc_prev):.1f}")
-            print(f"Stability counter: {found_count}/20")
-
             # if box is not moving for 20 times
             #print found_count
             if found_count >= 20:

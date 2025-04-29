@@ -1,4 +1,4 @@
-image: /home/spark/spark_noetic/src/3rd_app/auto_match_24/auto_match/scripts/../config/test_map.pgm
+image: /home/spark/spark_noetic_team17/Robot_manipulation/src/team17/auto_match_24/auto_match/scripts/../config/test_map.pgm
 resolution: 0.050000
 origin: [-10.000000, -10.000000, 0.000000]
 negate: 0

@@ -71,7 +71,6 @@ void angle1st_callback(const swiftpro::angle1st& msg)
     Gcode = (std::string)"G2202 N0 V" + m1 + "F100\r\n";
     ROS_INFO("Sending Gcode: %s", Gcode.c_str());
     _serial.write(Gcode.c_str());
-    _serial.write("M400\r\n");  // 等待运动完成
     result.data = _serial.read(_serial.available());
     ROS_INFO("Serial response: %s", result.data.c_str());
     ROS_INFO("=== Motor 1 Control Command Completed ===\n");
@@ -95,7 +94,6 @@ void angle2nd_callback(const swiftpro::angle2nd& msg)
     Gcode = (std::string)"G2202 N1 V" + m2 + "F100\r\n";
     ROS_INFO("Sending Gcode: %s", Gcode.c_str());
     _serial.write(Gcode.c_str());
-    _serial.write("M400\r\n");  // 等待运动完成
     result.data = _serial.read(_serial.available());
     ROS_INFO("Serial response: %s", result.data.c_str());
     ROS_INFO("=== Motor 2 Control Command Completed ===\n");
@@ -119,7 +117,6 @@ void angle3rd_callback(const swiftpro::angle3rd& msg)
     Gcode = (std::string)"G2202 N2 V" + m3 + "F100\r\n";
     ROS_INFO("Sending Gcode: %s", Gcode.c_str());
     _serial.write(Gcode.c_str());
-    _serial.write("M400\r\n");  // 等待运动完成
     result.data = _serial.read(_serial.available());
     ROS_INFO("Serial response: %s", result.data.c_str());
     ROS_INFO("=== Motor 3 Control Command Completed ===\n");
@@ -140,10 +137,9 @@ void angle4th_callback(const swiftpro::angle4th& msg)
     std_msgs::String result;
     std::string m4 = std::to_string(msg.angle4th);
 
-    Gcode = (std::string)"G2202 N3 V" + m4 + "F100\r\n";
+    Gcode = (std::string)"G2202 N3 V" + m4 + "F500\r\n";
     ROS_INFO("Sending Gcode: %s", Gcode.c_str());
     _serial.write(Gcode.c_str());
-    _serial.write("M400\r\n");  // 等待运动完成
     result.data = _serial.read(_serial.available());
     ROS_INFO("Serial response: %s", result.data.c_str());
     ROS_INFO("=== Motor 4 Control Command Completed ===\n");

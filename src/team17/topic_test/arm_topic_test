@@ -25,7 +25,7 @@ echo -e "\nTesting pump control (ON)..."
 rostopic pub /pump_topic swiftpro/status "status: 1" -1
 
 # Wait 2 seconds
-sleep 2
+sleep 4
 
 # Test pump control (turn off)
 echo -e "\nTesting pump control (OFF)..."
