@@ -264,9 +264,12 @@ class Detector:
                         w, h = results.size_x[i], results.size_y[i]
                         rospy.loginfo(f"{name:<15}{conf:.2f}      ({x:>4}, {y:>4})      ({w:>4}, {h:>4})")
 
+                # 记录发布到话题的物体数量
+                published_objects = 0
                 for i in range(len(results.name)):
                     if (results.name[i] not in self.items) or results.confidence[i] < 0.5:
                         continue
+                    published_objects += 1
                     obj = Detection2D()
                     obj.header = data.header
                     obj_hypothesis = ObjectHypothesisWithPose()
@@ -278,6 +281,13 @@ class Detector:
                     obj.bbox.center.x = int(results.x[i])
                     obj.bbox.center.y = int(results.y[i])
                     objArray.detections.append(obj)
+                    rospy.loginfo(f"发布物体到话题: {results.name[i]}, 置信度: {results.confidence[i]:.2f}, 位置: ({obj.bbox.center.x}, {obj.bbox.center.y})")
+                
+                if published_objects > 0:
+                    rospy.loginfo(f"总共发布了 {published_objects} 个物体到 /objects 话题")
+                else:
+                    rospy.loginfo("没有物体被发布到话题 (可能是置信度低于0.5或不在目标列表中)")
+
             except Exception as e:
                 rospy.logerr(f"Detection error: {str(e)}")
                 img_bgr = image
