@@ -14,7 +14,8 @@
         <remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astrapro')"/>
         <remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astra')"/>
     </node>
+	<!-- rviz -->
 
-    <!-- rviz -->
-    <node pkg="rviz" type="rviz" name="rviz" required="true"/>
+	<node pkg="rviz" type="rviz" name="rviz" required="true" args="-d $(find auto_match)/rviz/auto_match.rviz"/>
+
 </launch> 

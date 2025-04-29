@@ -110,39 +110,61 @@ class Detector:
         objArray = Detection2DArray()
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        except CvBridgeError as e:
-            print(e)
-        image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            if cv_image is None:
+                rospy.logerr("Failed to convert image message to OpenCV image")
+                return
+            
+            image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            if image is None:
+                rospy.logerr("Failed to convert BGR to RGB")
+                return
 
-        objArray.header = data.header
-        try:
-            results = self.detector.detect(image)
-            img_bgr = results.image
-            for i in range(len(results.name)):
-                if (results.name[i] not in self.items) or results.confidence[i] < 0.5:
-                    continue
-                obj = Detection2D()
-                obj.header = data.header
-                obj_hypothesis = ObjectHypothesisWithPose()
-                obj_hypothesis.id = int(self.obj_id[results.name[i]])
-                obj_hypothesis.score = results.confidence[i]
-                obj.results.append(obj_hypothesis)
-                obj.bbox.size_y = int(results.size_y[i])
-                obj.bbox.size_x = int(results.size_x[i])
-                obj.bbox.center.x = int(results.x[i])
-                obj.bbox.center.y = int(results.y[i])
-                objArray.detections.append(obj)
-        except:
-            img_bgr = image
-        self.object_pub.publish(objArray)
-        img = cv2.cvtColor(img_bgr, cv2.COLOR_RGB2BGR)
-        try:
-            image_out = self.bridge.cv2_to_imgmsg(img, "bgr8")
+            objArray.header = data.header
+            try:
+                results = self.detector.detect(image)
+                if results is None:
+                    rospy.logerr("Detection failed - no results returned")
+                    return
+                    
+                img_bgr = results.image
+                if img_bgr is None:
+                    rospy.logerr("Detection returned None image")
+                    return
+
+                for i in range(len(results.name)):
+                    if (results.name[i] not in self.items) or results.confidence[i] < 0.5:
+                        continue
+                    obj = Detection2D()
+                    obj.header = data.header
+                    obj_hypothesis = ObjectHypothesisWithPose()
+                    obj_hypothesis.id = int(self.obj_id[results.name[i]])
+                    obj_hypothesis.score = results.confidence[i]
+                    obj.results.append(obj_hypothesis)
+                    obj.bbox.size_y = int(results.size_y[i])
+                    obj.bbox.size_x = int(results.size_x[i])
+                    obj.bbox.center.x = int(results.x[i])
+                    obj.bbox.center.y = int(results.y[i])
+                    objArray.detections.append(obj)
+            except Exception as e:
+                rospy.logerr(f"Detection error: {str(e)}")
+                img_bgr = image
+                
+            if img_bgr is not None:  # Only process if we have a valid image
+                img = cv2.cvtColor(img_bgr, cv2.COLOR_RGB2BGR)
+                try:
+                    image_out = self.bridge.cv2_to_imgmsg(img, "bgr8")
+                    image_out.header = data.header
+                    self.image_pub.publish(image_out)
+                except CvBridgeError as e:
+                    rospy.logerr(f"Failed to convert image back to ROS message: {str(e)}")
+            
+            self.object_pub.publish(objArray)
+            
         except CvBridgeError as e:
-            print(e)
-        image_out.header = data.header
-        self.image_pub.publish(image_out)
-        
+            rospy.logerr(f"Failed to convert ROS message to OpenCV image: {str(e)}")
+        except Exception as e:
+            rospy.logerr(f"Unexpected error in image callback: {str(e)}")
+
 
 if __name__=='__main__':
     rospy.init_node('detector_node')
