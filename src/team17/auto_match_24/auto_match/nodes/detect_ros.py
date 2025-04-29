@@ -82,7 +82,7 @@ class SparkDetect:
         except Exception as e:
             rospy.logerr(f"加载模型失败:{e}, 开始下载")
             # 下载模型
-            url = "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n-seg.pt"
+            url = "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5s.pt"
             stat = os.system("wget " + url + " -O " + model_path)
             if not (os.path.exists(model_path) or stat == 0):
                 rospy.logerr("下载模型失败")
