@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <core/base/v8stdint.h>
 #include <core/base/thread.h>
 #include <core/base/locker.h>
