@@ -39,6 +39,16 @@ class SparkDetect:
             rospy.loginfo(f"尝试加载模型: {model_path}")
             self.model = yolov5.load(model_path)
             rospy.loginfo("模型加载成功")
+            
+            # 打印可用的类别ID信息
+            available_classes = self.model.model.names
+            class_ids = list(available_classes.keys())
+            min_id, max_id = min(class_ids), max(class_ids)
+            rospy.loginfo(f"模型支持的类别ID范围: [{min_id}, {max_id}]")
+            rospy.loginfo("类别ID映射:")
+            for class_id, class_name in sorted(available_classes.items()):
+                rospy.loginfo(f"  {class_id}: {class_name}")
+                
         except Exception as e:
             rospy.logerr(f"加载模型失败:{e}, 开始下载")
             # 下载模型
@@ -104,31 +114,45 @@ class SparkDetect:
             results = self.model(image, augment=True)
             rospy.logdebug(f"模型推理完成, 结果形状: {results.xyxy[0].shape}")
             
+            # 输出可用的类别ID
+            available_classes = list(self.model.model.names.keys())
+            rospy.logdebug(f"模型支持的类别ID: {available_classes}")
+            
             # 遍历检测结果
             for *xyxy, conf, cls in results.xyxy[0]:
-                # 计算中心点坐标
-                center_x = int((xyxy[0] + xyxy[2]) / 2)
-                center_y = int((xyxy[1] + xyxy[3]) / 2)
-                # 计算大小
-                size_x = int(xyxy[2] - xyxy[0])
-                size_y = int(xyxy[3] - xyxy[1])
-                
-                # 获取类别名称
-                class_name = self.model.model.names[int(cls)]
-                
-                # 绘制图像
-                label = f'{class_name} ({center_x},{center_y})'
-                cv2.rectangle(result.image, (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3])), (0, 0, 255), 1)
-                cv2.putText(result.image, label, (int(xyxy[0]), int(xyxy[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 1)
-                cv2.circle(result.image, (center_x, center_y), 5, (255, 0, 0), -1)
+                try:
+                    cls_id = int(cls)
+                    # 检查类别ID是否在可用范围内
+                    if cls_id not in self.model.model.names:
+                        rospy.logwarn(f"跳过未知类别ID: {cls_id}")
+                        continue
+                        
+                    # 计算中心点坐标
+                    center_x = int((xyxy[0] + xyxy[2]) / 2)
+                    center_y = int((xyxy[1] + xyxy[3]) / 2)
+                    # 计算大小
+                    size_x = int(xyxy[2] - xyxy[0])
+                    size_y = int(xyxy[3] - xyxy[1])
+                    
+                    # 获取类别名称
+                    class_name = self.model.model.names[cls_id]
+                    
+                    # 绘制图像
+                    label = f'{class_name} ({center_x},{center_y})'
+                    cv2.rectangle(result.image, (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3])), (0, 0, 255), 1)
+                    cv2.putText(result.image, label, (int(xyxy[0]), int(xyxy[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 1)
+                    cv2.circle(result.image, (center_x, center_y), 5, (255, 0, 0), -1)
 
-                # 存储中心点坐标,物体名称,置信度和图像
-                result.size_x.append(size_x)
-                result.size_y.append(size_y)
-                result.name.append(class_name)
-                result.x.append(center_x)
-                result.y.append(center_y)
-                result.confidence.append(float(conf))
+                    # 存储中心点坐标,物体名称,置信度和图像
+                    result.size_x.append(size_x)
+                    result.size_y.append(size_y)
+                    result.name.append(class_name)
+                    result.x.append(center_x)
+                    result.y.append(center_y)
+                    result.confidence.append(float(conf))
+                except Exception as e:
+                    rospy.logwarn(f"处理检测结果时出错: {str(e)}, 跳过此检测框")
+                    continue
 
         except Exception as e:
             rospy.logerr(f"检测过程发生错误: {type(e).__name__}")
