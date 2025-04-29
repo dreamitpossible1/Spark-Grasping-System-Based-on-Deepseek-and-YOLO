@@ -1,0 +1,20 @@
+<!--用于测试物体检测功能-->
+<launch>
+    <!-- 摄像机类型 -->
+    <arg name="camera_type_tel" default="astrapro" doc="camera type [astrapro, astra, d435...]"/>
+
+    <!--spark底盘驱动，机器人描述,底盘,相机-->
+    <include file="$(find spark_bringup)/launch/driver_bringup.launch">
+        <arg name="camera_type_tel" value="$(arg camera_type_tel)"/>
+    </include>
+
+    <!-- 启动检测节点 -->
+    <node pkg="auto_match" name="detect_ros" type="detect_ros.py" output="screen">
+        <remap from="image" to="/camera/color/image_raw" if="$(eval arg('camera_type_tel')=='d435')"/>
+        <remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astrapro')"/>
+        <remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astra')"/>
+    </node>
+
+    <!-- rviz -->
+    <node pkg="rviz" type="rviz" name="rviz" required="true"/>
+</launch> 
