@@ -28,11 +28,6 @@
 	<!-- 启动抓取堆叠独立节点 -->
 	<node pkg="auto_match" name="grasp_standalone" type="grasp_standalone.py" output="screen"/>
 
-	<!-- rviz可视化（可选） -->
-	<group if="$(arg open_rviz)">
-		<node pkg="rviz" type="rviz" name="rviz" required="true" args="-d $(find auto_match)/rviz/auto_match.rviz"/>
-	</group>
-
 	<!-- 启动重置机械臂节点 -->
 	<node pkg="move2grasp" type="resetarm.py" name="resetarm" output="screen"/>
 	
