@@ -182,6 +182,11 @@ class ArmAction:
         self.center_x = self.width // 2  # 图像底边中心的x坐标
         self.bottom_y = self.height  # 图像底边的y坐标
 
+        # 不使用排除区域，直接设置为全白图像（所有区域都允许）
+        self.exclude = np.ones((480, 640), dtype=np.uint8) * 255
+        self.disallowed = np.ones((480, 640), dtype=np.uint8) * 255
+        rospy.loginfo("已设置所有区域为可用区域，无排除区域")
+
         self.time = {46: 0, 88: 0, 85: 0}  # 堆叠次数记录
         self.block_height = 100  # 方块高度
         self.is_in = False
@@ -196,17 +201,6 @@ class ArmAction:
         # 添加任务完成信号发布者
         self.task_complete_pub = rospy.Publisher("/grasp_cmd", String, queue_size=1)
         
-        # 加载排除区域的图像
-        try:
-            self.exclude = np.array(cv2.imread(os.path.join(
-                rospkg.RosPack().get_path('auto_match'), 'config', 'tmp1.png'), 0))
-            self.disallowed = np.array(cv2.imread(os.path.join(
-                rospkg.RosPack().get_path('auto_match'), 'config', 'disallowed_area.png'), 0))
-        except:
-            rospy.logwarn("无法加载排除区域图像，将使用空白图像")
-            self.exclude = np.ones((480, 640), dtype=np.uint8) * 255
-            self.disallowed = np.ones((480, 640), dtype=np.uint8) * 255
-
     def grasp(self):
         '''
         使用深度学习找到所需物品在图像上的位置, 估算物品实际位置, 让机械臂抓取
