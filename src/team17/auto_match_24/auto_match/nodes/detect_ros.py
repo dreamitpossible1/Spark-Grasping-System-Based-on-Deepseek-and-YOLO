@@ -311,6 +311,10 @@ class Detector:
                 # 临时保存当前帧检测到的bowl位置，用于更新self.detected_bowls
                 current_frame_bowls = []
                 
+                # 临时保存当前帧检测到的其他物体信息（非bowl类型）
+                non_bowl_objects = []
+                
+                # 第一步：处理所有检测到的物体，更新bowl列表
                 for i in range(len(results.name)):
                     name = results.name[i]
                     
@@ -324,9 +328,12 @@ class Detector:
                     if name != 'bowl' and results.confidence[i] < 0.5:
                         continue
                     
-                    # 获取当前物体的位置
+                    # 获取当前物体的位置和大小
                     center_x = int(results.x[i])
                     center_y = int(results.y[i])
+                    size_x = int(results.size_x[i])
+                    size_y = int(results.size_y[i])
+                    confidence = results.confidence[i]
                     
                     # 特殊处理bowl物体
                     if name == 'bowl':
@@ -342,44 +349,75 @@ class Detector:
                             if dx <= self.bowl_position_threshold and dy <= self.bowl_position_threshold:
                                 is_new_bowl = False
                                 # 将当前检测到的bowl位置记录到当前帧bowls列表中
-                                current_frame_bowls.append((center_x, center_y))
+                                # 同时记录大小和置信度信息
+                                current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
                                 rospy.logdebug(f"检测到已知bowl: ({center_x}, {center_y}), 与已存在bowl({existing_bowl[0]}, {existing_bowl[1]})距离: dx={dx}, dy={dy}")
                                 break
                         
                         # 如果是新的bowl，添加到已检测bowl列表
                         if is_new_bowl:
-                            self.detected_bowls.append((center_x, center_y))
-                            current_frame_bowls.append((center_x, center_y))
+                            # 记录位置、大小和置信度信息
+                            self.detected_bowls.append((center_x, center_y, size_x, size_y, confidence))
+                            current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
                             rospy.loginfo(f"检测到新的bowl: ({center_x}, {center_y})")
-                    
-                    # 为所有符合条件的物体创建Detection2D消息
-                    published_objects += 1
-                    obj = Detection2D()
-                    obj.header = data.header
-                    obj_hypothesis = ObjectHypothesisWithPose()
-                    
-                    # 对于自定义物体ID使用手动映射，对于其他类别使用COCO ID
-                    if name in self.obj_id:
-                        obj_hypothesis.id = int(self.obj_id[name])
                     else:
-                        # 遍历模型的类别名称找到对应的ID
-                        for cls_id, cls_name in self.detector.model.model.names.items():
-                            if cls_name == name:
-                                obj_hypothesis.id = int(cls_id)
-                                break
-                    
-                    obj_hypothesis.score = results.confidence[i]
-                    obj.results.append(obj_hypothesis)
-                    obj.bbox.size_y = int(results.size_y[i])
-                    obj.bbox.size_x = int(results.size_x[i])
-                    obj.bbox.center.x = center_x
-                    obj.bbox.center.y = center_y
-                    objArray.detections.append(obj)
-                    rospy.loginfo(f"发布物体到话题: {name}, 置信度: {results.confidence[i]:.2f}, 位置: ({center_x}, {center_y})")
+                        # 非bowl类型的物体，直接添加到临时列表
+                        non_bowl_objects.append({
+                            'name': name,
+                            'center_x': center_x,
+                            'center_y': center_y,
+                            'size_x': size_x,
+                            'size_y': size_y,
+                            'confidence': confidence
+                        })
                 
                 # 更新已检测bowl列表，只保留当前帧中存在的bowl
                 if len(current_frame_bowls) > 0:
                     self.detected_bowls = current_frame_bowls
+                
+                # 第二步：根据跟踪列表构建并发布消息
+                
+                # 1. 首先添加所有非bowl类型的物体
+                for obj_info in non_bowl_objects:
+                    obj = Detection2D()
+                    obj.header = data.header
+                    obj_hypothesis = ObjectHypothesisWithPose()
+                    
+                    if obj_info['name'] in self.obj_id:
+                        obj_hypothesis.id = int(self.obj_id[obj_info['name']])
+                    else:
+                        for cls_id, cls_name in self.detector.model.model.names.items():
+                            if cls_name == obj_info['name']:
+                                obj_hypothesis.id = int(cls_id)
+                                break
+                    
+                    obj_hypothesis.score = obj_info['confidence']
+                    obj.results.append(obj_hypothesis)
+                    obj.bbox.size_y = obj_info['size_y']
+                    obj.bbox.size_x = obj_info['size_x']
+                    obj.bbox.center.x = obj_info['center_x']
+                    obj.bbox.center.y = obj_info['center_y']
+                    objArray.detections.append(obj)
+                    published_objects += 1
+                    rospy.loginfo(f"发布物体到话题: {obj_info['name']}, 置信度: {obj_info['confidence']:.2f}, 位置: ({obj_info['center_x']}, {obj_info['center_y']})")
+                
+                # 2. 然后从跟踪列表中添加所有bowl
+                for bowl_info in self.detected_bowls:
+                    # bowl_info格式: (center_x, center_y, size_x, size_y, confidence)
+                    obj = Detection2D()
+                    obj.header = data.header
+                    obj_hypothesis = ObjectHypothesisWithPose()
+                    
+                    obj_hypothesis.id = int(self.obj_id['bowl'])
+                    obj_hypothesis.score = bowl_info[4]  # confidence
+                    obj.results.append(obj_hypothesis)
+                    obj.bbox.size_y = bowl_info[3]  # size_y
+                    obj.bbox.size_x = bowl_info[2]  # size_x
+                    obj.bbox.center.x = bowl_info[0]  # center_x
+                    obj.bbox.center.y = bowl_info[1]  # center_y
+                    objArray.detections.append(obj)
+                    published_objects += 1
+                    rospy.loginfo(f"从跟踪列表发布bowl到话题: 置信度: {bowl_info[4]:.2f}, 位置: ({bowl_info[0]}, {bowl_info[1]})")
                 
                 if published_objects > 0:
                     rospy.loginfo(f"总共发布了 {published_objects} 个物体到 /objects 话题")
