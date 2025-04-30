@@ -374,6 +374,12 @@ class ArmAction:
             
         # 如果只有一个bowl或其他情况，执行原有的抓取逻辑
         else:
+            if len(cube_list) == 1:
+                rospy.loginfo("====== 检测结果 ======")
+                rospy.loginfo("桌面整洁，无需整理")
+                rospy.loginfo("====================")
+                return 0
+                
             # 原有的抓取逻辑
             closest_x = cube_list[0][1][0]
             closest_y = cube_list[0][1][1]
