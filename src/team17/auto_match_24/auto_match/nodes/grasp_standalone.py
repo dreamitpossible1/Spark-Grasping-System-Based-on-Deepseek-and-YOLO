@@ -65,6 +65,8 @@ class SwiftProInterface:
 
 class CamAction:
     def __init__(self):
+        # 添加对检测控制的发布者
+        self.detection_control_pub = rospy.Publisher("/grasp_cmd", String, queue_size=1)
         pass
 
     def detector(self):
@@ -113,6 +115,11 @@ class CamAction:
         """
         检查是否成功抓取了物体
         """
+        # 先恢复物料检测更新以获取最新状态
+        rospy.loginfo("临时恢复物料检测更新以检查抓取状态...")
+        self.detection_control_pub.publish(String("resume"))
+        rospy.sleep(1.0)  # 给检测系统一些时间更新
+        
         stat = False
         total = int(timeout * 4)
         count = 0
@@ -123,6 +130,11 @@ class CamAction:
                     count += 1
                     break
             rospy.sleep(0.25)
+        
+        # 检查完成后再次暂停物料检测更新
+        rospy.loginfo("检查完成，重新暂停物料检测更新...")
+        self.detection_control_pub.publish(String("pause"))
+        
         if count / total > confidence:
             stat = False
             rospy.loginfo("grasp failed")
@@ -260,7 +272,7 @@ class ArmAction:
         # 获取机械臂目标位置
         x = self.x_kb[0] * closest_y + self.x_kb[1]
         y = self.y_kb[0] * closest_x + self.y_kb[1]
-        z = -130.0
+        z = -180.0
         rospy.loginfo(f"转换为机械臂坐标: x={x}, y={y}, z={z}")
         
         # 机械臂移动到目标位置上方
@@ -288,10 +300,18 @@ class ArmAction:
         
         # 检查是否成功抓取
         rospy.loginfo("检查抓取是否成功...")
+        
+        # 以下逻辑使用更可靠的方法判断抓取成功
+        # 方法1: 根据相机检测状态判断
         grasp_success = self.cam.check_if_grasp(closest_x, closest_y, timeout=1.5, confidence=0.3)
+        
+        # 方法2: 也可以使用简化的判断逻辑，假设机械臂正常运行则大概率抓取成功
+        # grasp_success = True
         
         if not grasp_success:
             rospy.logwarn("抓取可能失败，重置机械臂...")
+            self.interface.set_pump(False)  # 确保关闭气泵
+            rospy.sleep(0.5)
             self.reset_pub.publish(position(10, 150, 160, 0))
             return 1
             
@@ -651,8 +671,8 @@ class GraspStack:
         rospy.loginfo(f"收到命令: '{cmd}'")
         
         if cmd == "grasp":
-            # 暂停物料检测更新
-            rospy.loginfo("暂停物料检测更新...")
+            # 暂停物料检测更新 - 仅暂停其他检测操作，不影响抓取检测
+            rospy.loginfo("暂停外部物料检测更新...")
             self.detection_control_pub.publish(String("pause"))
             rospy.sleep(0.5)  # 等待命令生效
             
@@ -660,6 +680,8 @@ class GraspStack:
             rospy.loginfo("开始执行抓取操作...")
             self.item_type = self.arm.grasp()
             rospy.loginfo(f"抓取完成，物体类型: {self.item_type}")
+            
+            # 抓取结果处理
             if self.item_type == 0:
                 rospy.logwarn("未能找到或抓取物体!")
                 # 恢复物料检测更新
@@ -671,7 +693,7 @@ class GraspStack:
                 rospy.loginfo("恢复物料检测更新...")
                 self.detection_control_pub.publish(String("resume"))
             else:
-                rospy.loginfo(f"成功抓取ID为{self.item_type}的物体")
+                rospy.loginfo(f"成功抓取ID为{self.item_type}的物体，保持物料检测暂停状态，直到放置完成")
             
         elif cmd == "drop":
             # 执行放置
