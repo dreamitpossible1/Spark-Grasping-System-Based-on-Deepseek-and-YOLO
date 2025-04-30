@@ -219,8 +219,8 @@ class Detector:
         )
         rospy.loginfo("检测器初始化完成")
         
-        self.obj_id = {'book': 73, 'cup': 41}  # 反转键值对以便查找
-        self.items = ['book', 'cup']
+        self.obj_id = {'book': 73, 'bowl': 45}  # 反转键值对以便查找
+        self.items = ['book', 'bowl']
 
     def image_cb(self, data):
         objArray = Detection2DArray()
@@ -267,7 +267,11 @@ class Detector:
                 # 记录发布到话题的物体数量
                 published_objects = 0
                 for i in range(len(results.name)):
-                    if (results.name[i] not in self.items) or results.confidence[i] < 0.5:
+                    if results.name[i] not in self.items:
+                        continue
+                    if results.name[i] == 'bowl' and results.confidence[i] < 0.2:
+                        continue
+                    if results.name[i] != 'bowl' and results.confidence[i] < 0.5:
                         continue
                     published_objects += 1
                     obj = Detection2D()
