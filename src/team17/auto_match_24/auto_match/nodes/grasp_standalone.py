@@ -17,12 +17,14 @@ from swiftpro.msg import position, status
 class SwiftProInterface:
     def __init__(self):
         # 创建控制机械臂的topic发布者
+        rospy.loginfo("初始化SwiftProInterface...")
         self.arm_position_pub = rospy.Publisher(
             "position_write_topic", position, queue_size=1)   # 机械臂运动位置发布者
         self.arm_pump_pub = rospy.Publisher(
             "pump_topic", status, queue_size=1)               # 机械臂气泵状态发布者
         self.arm_status_pub = rospy.Publisher(
             "swiftpro_status_topic", status, queue_size=1)    # 机械臂开关状态发布者
+        rospy.loginfo("SwiftProInterface初始化完成")
 
     def set_pose(self, x, y, z, speed=1000):
         '''
@@ -33,27 +35,31 @@ class SwiftProInterface:
         pos.y = y
         pos.z = z
         pos.speed = speed
-        # rospy.loginfo(f"set pose {x},{y},{z}")
+        rospy.loginfo(f"设置机械臂位置: x={x}, y={y}, z={z}, speed={speed}")
         self.arm_position_pub.publish(pos)
+        if abs(z) > 100:  # 如果高度较大，可能是大幅度移动
+            rospy.loginfo("执行大幅度移动，请稍等...")
 
     def set_pump(self, enable: bool):
         '''
         吸取或释放，设定机械臂气泵状态
         '''
-        rospy.loginfo(f"设定机械臂气泵状态为：{enable}")
         if enable:
+            rospy.loginfo("启动气泵 (吸取)")
             self.arm_pump_pub.publish(status(1))
         else:
+            rospy.loginfo("关闭气泵 (释放)")
             self.arm_pump_pub.publish(status(0))
 
     def set_status(self, lock: bool):
         '''
         设定机械臂开关状态
         '''
-        rospy.loginfo(f"set arm status {lock}")
         if lock:
+            rospy.loginfo("锁定机械臂")
             self.arm_status_pub.publish(status(1))
         else:
+            rospy.loginfo("解锁机械臂")
             self.arm_status_pub.publish(status(0))
 
 
@@ -70,26 +76,37 @@ class CamAction:
         cube_list[i][0]:代表第i个物体的ID信息;               cube_list[i][1]:代表第i个物体的位置信息
         cube_list[i][1][0]:代表第i个物体的x方向上的位置;     cube_list[i][1][1]:代表第i个物体的y方向上的位置
         '''
+        rospy.loginfo("开始调用detector()方法获取物体信息")
         obj_dist = {}
         cube_list = []
         obj_array = None
 
         try:
+            rospy.loginfo("等待/objects话题消息...")
             obj_array = rospy.wait_for_message(
                 "/objects", Detection2DArray, timeout=5)
-        except Exception:
-            rospy.logerr("can't get object message")
+            rospy.loginfo(f"成功获取/objects消息，包含 {len(obj_array.detections)} 个检测结果")
+        except Exception as e:
+            rospy.logerr(f"无法获取object消息: {str(e)}")
             cube_list.clear()
             return cube_list
         
         # 提取
-        for obj in obj_array.detections:
-            obj_dist[obj.results[0].id] = [obj.bbox.center.x, obj.bbox.center.y]
+        rospy.loginfo("开始处理检测结果...")
+        for i, obj in enumerate(obj_array.detections):
+            obj_id = obj.results[0].id
+            center_x = obj.bbox.center.x
+            center_y = obj.bbox.center.y
+            score = obj.results[0].score
+            rospy.loginfo(f"检测到物体 #{i+1}: ID={obj_id}, 位置=({center_x}, {center_y}), 置信度={score}")
+            obj_dist[obj_id] = [center_x, center_y]
 
         # 筛选出需要的物品 cube_list中的key代表识别物体的ID，value代表位置信息
         for key, value in obj_dist.items():
             cube_list.append([key, value])
+            rospy.loginfo(f"添加到目标列表: ID={key}, 位置=({value[0]}, {value[1]})")
 
+        rospy.loginfo(f"detector()返回结果: 找到 {len(cube_list)} 个目标物体")
         return cube_list
     
     def check_if_grasp(self, x, y, timeout=3, confidence=0.5, scope=30):
@@ -192,15 +209,21 @@ class ArmAction:
         使用深度学习找到所需物品在图像上的位置, 估算物品实际位置, 让机械臂抓取
         @return: 抓取到物品的id, 0为未识别到需要的物品
         '''
+        rospy.loginfo("====== 开始抓取流程 ======")
         x = 0
         y = 0
         z = 0
         cube_list = []
         # 寻找物品
+        rospy.loginfo("调用detector获取物体...")
         cube_list_tmp = self.cam.detector()
+        rospy.loginfo(f"detector返回 {len(cube_list_tmp)} 个物体")
+        
         if len(cube_list_tmp) == 0:
+            rospy.logwarn("未检测到任何物体，退出抓取流程")
             return 0
         
+        rospy.loginfo("开始筛选排除区域外的物体...")
         for pice in cube_list_tmp:
             xp = pice[1][0]
             yp = pice[1][1]
@@ -208,16 +231,24 @@ class ArmAction:
             if 0 <= int(yp) < self.exclude.shape[0] and 0 <= int(xp) < self.exclude.shape[1]:
                 if self.exclude[int(yp), int(xp)] >= 128:
                     cube_list.append(pice)
+                    rospy.loginfo(f"物体ID={pice[0]}在允许区域内，添加到目标列表")
+                else:
+                    rospy.loginfo(f"物体ID={pice[0]}在排除区域内，忽略")
             else:
                 # 如果坐标超出边界，直接添加
                 cube_list.append(pice)
+                rospy.loginfo(f"物体ID={pice[0]}坐标超出边界，默认添加到目标列表")
 
         if len(cube_list) == 0:
+            rospy.logwarn("筛选后没有可抓取的物体，退出抓取流程")
             return 0
             
+        # 寻找最佳抓取目标（选择y坐标最大的物体，即最靠近底部的物体）
         closest_x = cube_list[0][1][0]
         closest_y = cube_list[0][1][1]
         id = cube_list[0][0]
+        rospy.loginfo(f"初始目标: ID={id}, 位置=({closest_x}, {closest_y})")
+        
         for pice in cube_list:
             xp = pice[1][0]
             yp = pice[1][1]
@@ -225,33 +256,63 @@ class ArmAction:
                 closest_x = xp
                 closest_y = yp
                 id = pice[0]
+                rospy.loginfo(f"找到更优目标: ID={id}, 位置=({closest_x}, {closest_y})")
                 
-        rospy.loginfo(f"物品位置在: {closest_x}, {closest_y}")
+        rospy.loginfo(f"最终选择目标: ID={id}, 位置在: {closest_x}, {closest_y}")
+        
         # 获取机械臂目标位置
         x = self.x_kb[0] * closest_y + self.x_kb[1]
         y = self.y_kb[0] * closest_x + self.y_kb[1]
         z = -50.0
-        rospy.loginfo(f"arm: {x}, {y}, {z}")
+        rospy.loginfo(f"转换为机械臂坐标: x={x}, y={y}, z={z}")
+        
         # 机械臂移动到目标位置上方
+        rospy.loginfo("移动机械臂到目标上方...")
         self.interface.set_pose(x, y, z + 20)
         rospy.sleep(0.5)
+        
+        # 机械臂移动到目标位置
+        rospy.loginfo("移动机械臂到目标位置...")
         self.interface.set_pose(x, y, z)
+        
         # 打开气泵，进行吸取
+        rospy.loginfo("启动气泵进行吸取...")
         self.interface.set_pump(True)
         rospy.sleep(1.0)
+        
         # 抬起目标方块
-        rospy.loginfo(f"把物品抬起来")
+        rospy.loginfo("抬起物体...")
         self.interface.set_pose(x, y, z + 120)
         rospy.sleep(1.0)
-        rospy.loginfo(f"摆到旁边")
+        
+        rospy.loginfo("将机械臂移动到安全位置...")
         self.arm_default_pose()
         rospy.sleep(0.75)
-        if not self.cam.check_if_grasp(closest_x, closest_y, timeout=1.5, confidence=0.3):
+        
+        # 检查是否成功抓取
+        rospy.loginfo("检查抓取是否成功...")
+        grasp_success = self.cam.check_if_grasp(closest_x, closest_y, timeout=1.5, confidence=0.3)
+        
+        if not grasp_success:
+            rospy.logwarn("抓取可能失败，重置机械臂...")
             self.reset_pub.publish(position(10, 150, 160, 0))
             return 1
+            
+        rospy.loginfo(f"抓取成功，物体ID: {id}")
         self.grasp_status_pub.publish(String("0"))
-        if self.time[id] < 3:
+        
+        # 更新堆叠次数
+        if id in self.time and self.time[id] < 3:
             self.time[id] += 1
+            rospy.loginfo(f"物体ID={id}的堆叠次数更新为: {self.time[id]}")
+        else:
+            if id not in self.time:
+                rospy.logwarn(f"未在堆叠记录中找到ID={id}，默认不更新堆叠次数")
+                # 添加新ID到time字典
+                self.time[id] = 1
+                rospy.loginfo(f"已添加新ID={id}到堆叠记录，初始堆叠次数: 1")
+                
+        rospy.loginfo("====== 抓取流程结束 ======")
         return id
 
     def drop(self, item):
@@ -478,22 +539,33 @@ class ArmAction:
         """
         检查激光雷达数据，判断是否有物体在前方
         """
+        rospy.loginfo("接收到激光雷达数据，开始检查前方物体...")
         tested = False
         rospy.sleep(3.0)
-        for _ in range(10):
-            for distance in data.ranges:
-                tested_once = False
+        
+        for i in range(10):
+            obstacle_detected = False
+            for idx, distance in enumerate(data.ranges):
                 if distance == 0.0:
                     continue
                 if distance < 0.3:
-                    tested_once = True
+                    angle = idx * data.angle_increment + data.angle_min
+                    angle_degrees = angle * 180.0 / math.pi
+                    rospy.loginfo(f"检测到障碍物: 距离={distance}m, 角度={angle_degrees:.1f}度")
+                    obstacle_detected = True
                     break
-            if tested_once:
+                    
+            if obstacle_detected:
                 tested = True
+                rospy.loginfo("确认前方有物体")
+            else:
+                rospy.loginfo("前方未检测到物体")
+                
             rospy.sleep(0.3)
             break
 
         self.is_in = tested
+        rospy.loginfo(f"物体检测状态更新为: {self.is_in}")
         self.testing = False
 
     def arm_home(self, block=False):
@@ -521,11 +593,23 @@ class GraspStack:
         self.arm = ArmAction()
         
         # 订阅控制命令
+        rospy.loginfo("订阅grasp_cmd话题，等待控制命令...")
         self.cmd_sub = rospy.Subscriber("grasp_cmd", String, self.cmd_callback)
         
         # 其他初始化
         self.item_type = 0
-        rospy.loginfo("Grasp and stack node initialized")
+        
+        # 添加一个定期检查的定时器
+        self.check_timer = rospy.Timer(rospy.Duration(10), self.periodic_check)
+        
+        rospy.loginfo("Grasp and stack node初始化完成，等待命令...")
+        
+    def periodic_check(self, event):
+        """定期检查系统状态"""
+        cube_list = self.arm.cam.detector()
+        rospy.loginfo(f"定期检查: 当前视野中有 {len(cube_list)} 个物体")
+        if len(cube_list) > 0:
+            rospy.loginfo(f"可见物体: {cube_list}")
         
     def cmd_callback(self, msg):
         """
@@ -536,38 +620,69 @@ class GraspStack:
             - "reset": 重置机械臂到默认位置
         """
         cmd = msg.data
+        rospy.loginfo(f"收到命令: '{cmd}'")
+        
         if cmd == "grasp":
             # 执行抓取
+            rospy.loginfo("开始执行抓取操作...")
             self.item_type = self.arm.grasp()
-            rospy.loginfo(f"Grasped item type: {self.item_type}")
+            rospy.loginfo(f"抓取完成，物体类型: {self.item_type}")
+            if self.item_type == 0:
+                rospy.logwarn("未能找到或抓取物体!")
+            elif self.item_type == 1:
+                rospy.logwarn("抓取可能不成功，需要重试")
+            else:
+                rospy.loginfo(f"成功抓取ID为{self.item_type}的物体")
             
         elif cmd == "drop":
             # 执行放置
             if self.item_type > 0:
+                rospy.loginfo(f"开始放置ID为{self.item_type}的物体...")
                 self.arm.drop(self.item_type)
-                rospy.loginfo(f"Dropped item type: {self.item_type}")
+                rospy.loginfo(f"放置完成，物体: {self.item_type}")
                 self.item_type = 0
             else:
-                rospy.logwarn("No item to drop")
+                rospy.logwarn("没有抓取的物体，无法执行放置操作")
                 
         elif cmd == "reset":
             # 重置机械臂
+            rospy.loginfo("重置机械臂到默认位置...")
             self.arm.arm_default_pose()
-            rospy.loginfo("Arm reset to default pose")
+            rospy.loginfo("机械臂重置完成")
+            
+        elif cmd == "check":
+            # 检查当前状态
+            cube_list = self.arm.cam.detector()
+            rospy.loginfo(f"当前状态检查: 视野中有 {len(cube_list)} 个物体")
+            if len(cube_list) > 0:
+                rospy.loginfo(f"可见物体: {cube_list}")
+            rospy.loginfo(f"当前抓取的物体ID: {self.item_type}")
             
         else:
-            rospy.logwarn(f"Unknown command: {cmd}")
+            rospy.logwarn(f"未知命令: '{cmd}'，支持的命令有: grasp, drop, reset, check")
 
     def run(self):
         """
         主运行循环
         """
-        rospy.loginfo("Grasp and Stack node is running...")
+        rospy.loginfo("Grasp and Stack节点正在运行...")
+        # 启动时进行一次检查
+        rospy.Timer(rospy.Duration(2), lambda event: self.cmd_callback(String("check")), oneshot=True)
         rospy.spin()
 
 
 if __name__ == '__main__':
     try:
+        rospy.loginfo("====================================================")
+        rospy.loginfo("               启动抓取堆叠独立节点                  ")
+        rospy.loginfo("====================================================")
+        rospy.loginfo("支持的命令:")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"grasp\" -1")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"drop\" -1")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"reset\" -1")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"check\" -1")
+        rospy.loginfo("====================================================")
+        
         node = GraspStack()
         node.run()
     except rospy.ROSInterruptException:
