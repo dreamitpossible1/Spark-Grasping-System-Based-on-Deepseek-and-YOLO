@@ -14,6 +14,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 import platform
 import pathlib
+import threading
 plt = platform.system()
 if plt != 'Windows':
     pathlib.WindowsPath = pathlib.PosixPath
@@ -145,6 +146,9 @@ class SparkDetect:
             detections = results.xyxy[0]  # 获取检测结果
             rospy.logdebug(f"模型推理完成, 检测到{len(detections)}个目标")
             
+            # 使用YOLOv5内置的渲染功能获取带边界框的图像
+            result.image = results.render()[0]
+            
             # 遍历检测结果
             for *xyxy, conf, cls in detections:
                 try:
@@ -168,12 +172,6 @@ class SparkDetect:
                     # 获取类别名称
                     class_name = self.model.model.names[cls_id]
                     
-                    # 绘制图像
-                    label = f'{class_name} ({center_x},{center_y})'
-                    cv2.rectangle(result.image, (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3])), (0, 0, 255), 1)
-                    cv2.putText(result.image, label, (int(xyxy[0]), int(xyxy[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 1)
-                    cv2.circle(result.image, (center_x, center_y), 5, (255, 0, 0), -1)
-
                     # 存储中心点坐标,物体名称,置信度和图像
                     result.size_x.append(size_x)
                     result.size_y.append(size_y)
@@ -213,6 +211,19 @@ class Detector:
         # 等待一段时间确保相机已经准备好
         rospy.sleep(2.0)
         
+        # 创建显示窗口
+        cv2.namedWindow('YOLOv5 物体检测', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('YOLOv5 物体检测', 640, 480)
+        
+        # 设置最新检测图像
+        self.latest_detection_image = None
+        self.image_lock = threading.Lock()
+        
+        # 开启显示线程
+        self.display_thread = threading.Thread(target=self.display_detection_results)
+        self.display_thread.daemon = True
+        self.display_thread.start()
+        
         # 订阅相机话题
         self.image_sub = rospy.Subscriber(
             "/camera/rgb/image_raw", Image, self.image_cb, queue_size=1, buff_size=2**24
@@ -220,7 +231,28 @@ class Detector:
         rospy.loginfo("检测器初始化完成")
         
         self.obj_id = {'book': 73, 'bowl': 45}  # 反转键值对以便查找
-        self.items = ['book', 'bowl']
+        self.items = ['book', 'bowl'] 
+
+    def display_detection_results(self):
+        """单独的线程用于显示检测结果"""
+        rate = rospy.Rate(15)  # 15Hz的显示更新速率
+        
+        while not rospy.is_shutdown():
+            try:
+                with self.image_lock:
+                    if self.latest_detection_image is not None:
+                        cv2.imshow('YOLOv5 物体检测', self.latest_detection_image)
+                
+                key = cv2.waitKey(1)
+                if key == 27 or key == ord('q'):  # ESC或q键退出
+                    rospy.loginfo("用户关闭了图像显示窗口")
+                    break
+                    
+                rate.sleep()
+            except Exception as e:
+                rospy.logerr(f"显示线程发生错误: {e}")
+        
+        cv2.destroyAllWindows()
 
     def image_cb(self, data):
         objArray = Detection2DArray()
@@ -243,7 +275,7 @@ class Detector:
                     rospy.logerr("Detection failed - no results returned")
                     return
                     
-                img_bgr = results.image
+                img_bgr = cv2.cvtColor(results.image, cv2.COLOR_RGB2BGR)
                 if img_bgr is None:
                     rospy.logerr("Detection returned None image")
                     return
@@ -264,6 +296,10 @@ class Detector:
                         w, h = results.size_x[i], results.size_y[i]
                         rospy.loginfo(f"{name:<15}{conf:.2f}      ({x:>4}, {y:>4})      ({w:>4}, {h:>4})")
 
+                # 更新最新检测图像用于显示
+                with self.image_lock:
+                    self.latest_detection_image = img_bgr.copy()
+
                 # 记录发布到话题的物体数量
                 published_objects = 0
                 for i in range(len(results.name)):
@@ -277,7 +313,17 @@ class Detector:
                     obj = Detection2D()
                     obj.header = data.header
                     obj_hypothesis = ObjectHypothesisWithPose()
-                    obj_hypothesis.id = int(self.obj_id[results.name[i]])
+                    
+                    # 对于自定义物体ID使用手动映射，对于其他类别使用COCO ID
+                    if results.name[i] in self.obj_id:
+                        obj_hypothesis.id = int(self.obj_id[results.name[i]])
+                    else:
+                        # 遍历模型的类别名称找到对应的ID
+                        for cls_id, cls_name in self.detector.model.model.names.items():
+                            if cls_name == results.name[i]:
+                                obj_hypothesis.id = int(cls_id)
+                                break
+                    
                     obj_hypothesis.score = results.confidence[i]
                     obj.results.append(obj_hypothesis)
                     obj.bbox.size_y = int(results.size_y[i])
@@ -294,12 +340,11 @@ class Detector:
 
             except Exception as e:
                 rospy.logerr(f"Detection error: {str(e)}")
-                img_bgr = image
+                img_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                 
             if img_bgr is not None:  # Only process if we have a valid image
-                img = cv2.cvtColor(img_bgr, cv2.COLOR_RGB2BGR)
                 try:
-                    image_out = self.bridge.cv2_to_imgmsg(img, "bgr8")
+                    image_out = self.bridge.cv2_to_imgmsg(img_bgr, "bgr8")
                     image_out.header = data.header
                     self.image_pub.publish(image_out)
                 except CvBridgeError as e:
@@ -315,9 +360,19 @@ class Detector:
 
 if __name__=='__main__':
     rospy.init_node('detector_node')
+    rospy.loginfo("====================================================")
+    rospy.loginfo("              启动YOLOv5物体检测节点                 ")
+    rospy.loginfo("====================================================")
+    rospy.loginfo("窗口操作:")
+    rospy.loginfo("  - 按ESC或q键关闭窗口")
+    rospy.loginfo("  - 检测结果同时发布到/objects话题")
+    rospy.loginfo("====================================================")
+    
     obj=Detector()
     try:
         rospy.spin()
     except KeyboardInterrupt:
         print("ShutDown")
+    
+    # 确保窗口关闭
     cv2.destroyAllWindows()
