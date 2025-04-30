@@ -26,7 +26,7 @@ class SwiftProInterface:
             "swiftpro_status_topic", status, queue_size=1)    # 机械臂开关状态发布者
         rospy.loginfo("SwiftProInterface初始化完成")
 
-    def set_pose(self, x, y, z, speed=1000):
+    def set_pose(self, x, y, z, speed=2000):
         '''
         发布机械臂运动位置
         '''
@@ -278,12 +278,14 @@ class ArmAction:
         # 机械臂移动到目标位置上方
         rospy.loginfo("移动机械臂到目标上方...")
         self.interface.set_pose(x, y, z + 40)
-        rospy.sleep(0.5)
+        rospy.sleep(2.5)
         
         # 机械臂移动到目标位置
         rospy.loginfo("移动机械臂到目标位置...")
         self.interface.set_pose(x, y, z)
-        
+        rospy.sleep(2.0)
+
+
         # 打开气泵，进行吸取
         rospy.loginfo("启动气泵进行吸取...")
         self.interface.set_pump(True)
@@ -292,11 +294,11 @@ class ArmAction:
         # 抬起目标方块
         rospy.loginfo("抬起物体...")
         self.interface.set_pose(x, y, z + 120)
-        rospy.sleep(1.0)
+        rospy.sleep(2.0)
         
         rospy.loginfo("将机械臂移动到安全位置...")
         self.arm_default_pose()
-        rospy.sleep(0.75)
+        rospy.sleep(1.75)
         
         # 检查是否成功抓取
         rospy.loginfo("检查抓取是否成功...")
