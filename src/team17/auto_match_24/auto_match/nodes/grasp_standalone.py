@@ -263,12 +263,12 @@ class ArmAction:
         # 获取机械臂目标位置
         x = self.x_kb[0] * closest_y + self.x_kb[1]
         y = self.y_kb[0] * closest_x + self.y_kb[1]
-        z = -50.0
+        z = -130.0
         rospy.loginfo(f"转换为机械臂坐标: x={x}, y={y}, z={z}")
         
         # 机械臂移动到目标位置上方
         rospy.loginfo("移动机械臂到目标上方...")
-        self.interface.set_pose(x, y, z + 20)
+        self.interface.set_pose(x, y, z + 40)
         rospy.sleep(0.5)
         
         # 机械臂移动到目标位置
