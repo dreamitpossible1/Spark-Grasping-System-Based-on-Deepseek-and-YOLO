@@ -1,4 +1,4 @@
-﻿The following portions of the YDLIDAR’s YDlidar SDK (“Software” referred to in the terms below) are made available to you under the terms of the MIT License provided below.  
+The following portions of the YDLIDAR’s YDlidar SDK (“Software” referred to in the terms below) are made available to you under the terms of the MIT License provided below.  
 
 YDLidar-SDK
 ├── cmake

@@ -1,1 +1,14 @@
-amcl.launch.xml
+<launch>
+  <!-- 声明接收父级传递的参数 -->
+  <arg name="initial_pose_x" default="0.0" />
+  <arg name="initial_pose_y" default="0.0" />
+  <arg name="initial_pose_a" default="0.0" />
+
+  <!-- 将参数传递给 amcl.launch.xml 文件 -->
+  <include file="$(find spark_navigation)/launch/includes/amcl/amcl.launch.xml">
+    <!-- 在此传递参数到子 launch 文件 -->
+    <arg name="initial_pose_x" value="$(arg initial_pose_x)" />
+    <arg name="initial_pose_y" value="$(arg initial_pose_y)" />
+    <arg name="initial_pose_a" value="$(arg initial_pose_a)" />
+  </include>
+</launch>

@@ -178,11 +178,15 @@ class GraspObject(State):
         cv_image5 = cv2.erode(cv_image5, None, iterations=4)
         cv_image5 = cv2.dilate(cv_image5, None, iterations=4)
 
+
         # detect contour
         #cv2.imshow("win1", cv_image1)
         # cv2.imshow("win2", cv_image5)
         # cv2.waitKey(1)
         contours, hier = cv2.findContours(cv_image5, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 打印轮廓信息
+        print(f"\nFound {len(contours)} contours")
 
         # if find contours, pick the biggest box
         if len(contours) > 0:
@@ -206,6 +210,7 @@ class GraspObject(State):
             #print found_count
             if found_count >= 20:
                 self.is_found_object = True
+                print("Object FOUND and STABLE!")
             else:
                 # if box is not moving
                 if abs(xc - xc_prev) <= 2 and abs(yc - yc_prev) <= 2:
@@ -214,8 +219,9 @@ class GraspObject(State):
                     found_count = 0
         else:
             found_count = 0
+            
         xc_prev = xc
-        yc_prev = yc    
+        yc_prev = yc
  
 
 class ReleaseObject(State):

@@ -1,0 +1,19 @@
+<!--用于测试物体检测功能-->
+<launch>
+    <!-- 摄像机类型 -->
+    <arg name="camera_type_tel" default="astrapro" doc="camera type [astrapro, astra, d435...]"/>
+
+    <!--spark底盘驱动，机器人描述,底盘,相机-->
+    <include file="$(find spark_bringup)/launch/driver_bringup.launch">
+        <arg name="camera_type_tel" value="$(arg camera_type_tel)"/>
+    </include>
+
+    <!-- rviz -->
+    <node pkg="rviz" type="rviz" name="rviz" required="true">
+        <!-- 添加默认配置以显示图像 -->
+        <param name="config" value="$(find auto_match)/rviz/detect_test.rviz" if="$(eval arg('camera_type_tel')=='astrapro')"/>
+    </node>
+
+    <!-- 启动图像查看器以便调试 -->
+    <node pkg="rqt_image_view" type="rqt_image_view" name="image_view" />
+</launch> 

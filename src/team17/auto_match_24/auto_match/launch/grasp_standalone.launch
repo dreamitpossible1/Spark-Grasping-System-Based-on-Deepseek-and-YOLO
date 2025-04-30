@@ -1,0 +1,37 @@
+<!--grasp_standalone-->
+<!--基于auto_match简化的抓取堆叠功能-->
+<launch>
+	<!-- 启动 rosbridge_server 节点，用于可能的web界面交互 -->
+    <node name="rosbridge_server" pkg="rosbridge_server" type="rosbridge_websocket" output="screen" />
+	
+	<!-- Arguments -->
+	<arg name="open_rviz" default="true"/>
+    <arg name="lidar_type_tel" default="ydlidar_g6" doc="lidar type [3iroboticslidar2, ydlidar_g2, ydlidar_g6]"/>
+	<arg name="camera_type_tel" default="astrapro" doc="camera type [astrapro, astra, d435...]"/>
+
+	<!--spark底盘驱动，仅启用基本驱动和相机-->
+	<include file="$(find spark_bringup)/launch/driver_bringup.launch">
+		<arg name="camera_type_tel" value="$(arg camera_type_tel)"/>
+		<arg name="lidar_type_tel" value="ydlidar_g6"/>
+	</include>
+
+	<!--UARM机械臂-->
+	<include file="$(find swiftpro)/launch/pro_control_nomoveit.launch"/>
+
+	<!-- 启动物体检测节点 -->
+	<node pkg="auto_match" name="detect_ros" type="detect_ros.py" output="screen"> 
+		<remap from="image" to="/camera/color/image_raw" if="$(eval arg('camera_type_tel')=='d435')"/>
+		<remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astrapro')"/>
+		<remap from="image" to="/camera/rgb/image_raw" if="$(eval arg('camera_type_tel')=='astra')"/>
+	</node>
+
+	<!-- 启动抓取堆叠独立节点 -->
+	<node pkg="auto_match" name="grasp_standalone" type="grasp_standalone.py" output="screen"/>
+
+	<!-- 启动重置机械臂节点 -->
+	<node pkg="move2grasp" type="resetarm.py" name="resetarm" output="screen"/>
+	
+	<!-- 启动web视频服务器，用于远程查看摄像头图像 -->
+	<include file="$(find move2grasp)/launch/web_video_server.launch" />
+
+</launch>

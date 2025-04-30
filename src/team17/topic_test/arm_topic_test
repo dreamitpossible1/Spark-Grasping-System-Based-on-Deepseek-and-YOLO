@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Usage:
+# 1. Make executable:     chmod +x arm_topic_test
+# 2. Terminal 1:         rosrun swiftpro swiftpro_write_node
+# 3. Terminal 2:         ./src/team17/topic_test/arm_topic_test
+#
+# This script tests following topics:
+# - position_write_topic: Position control
+# - pump_topic: Pump control
+# - swiftpro_status_topic: Arm status
+# - gripper_topic: Gripper control
+# - angle1st~4th_topic: Motor angles
+# - buzzer_topic: Buzzer control
+
+# Test position control (x=100, y=100, z=100, speed=1000)
+echo "Testing position control..."
+rostopic pub /position_write_topic swiftpro/position "x: 100.0
+y: 100.0
+z: 100.0
+speed: 1000" -1
+
+# Test pump control (turn on)
+echo -e "\nTesting pump control (ON)..."
+rostopic pub /pump_topic swiftpro/status "status: 1" -1
+
+# Wait 2 seconds
+sleep 4
+
+# Test pump control (turn off)
+echo -e "\nTesting pump control (OFF)..."
+rostopic pub /pump_topic swiftpro/status "status: 0" -1
+
+# Test swiftpro status (attach)
+echo -e "\nTesting swiftpro status (attach)..."
+rostopic pub /swiftpro_status_topic swiftpro/status "status: 1" -1
+
+# Test swiftpro status (detach)
+echo -e "\nTesting swiftpro status (detach)..."
+rostopic pub /swiftpro_status_topic swiftpro/status "status: 0" -1
+
+# Test individual motor angles
+echo -e "\nTesting motor 1 angle control (45 degrees)..."
+rostopic pub /angle1st_topic swiftpro/angle1st "angle1st: 45.0" -1
+
+echo -e "\nTesting motor 2 angle control (45 degrees)..."
+rostopic pub /angle2nd_topic swiftpro/angle2nd "angle2nd: 45.0" -1
+
+echo -e "\nTesting motor 3 angle control (45 degrees)..."
+rostopic pub /angle3rd_topic swiftpro/angle3rd "angle3rd: 45.0" -1
+
+echo -e "\nTesting motor 4 angle control (45 degrees)..."
+rostopic pub /angle4th_topic swiftpro/angle4th "angle4th: 45.0" -1
+
+# Test buzzer (frequency: 1000Hz, time: 1 second)
+echo -e "\nTesting buzzer..."
+rostopic pub /buzzer_topic swiftpro/buzzer "frequent: 1000
+time: 1" -1
+
+echo -e "\nAll tests completed!"
