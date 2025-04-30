@@ -196,7 +196,7 @@ class ArmAction:
         # 加载排除区域的图像
         try:
             self.exclude = np.array(cv2.imread(os.path.join(
-                rospkg.RosPack().get_path('auto_match'), 'config', 'tmp.png'), 0))
+                rospkg.RosPack().get_path('auto_match'), 'config', 'tmp1.png'), 0))
             self.disallowed = np.array(cv2.imread(os.path.join(
                 rospkg.RosPack().get_path('auto_match'), 'config', 'disallowed_area.png'), 0))
         except:
