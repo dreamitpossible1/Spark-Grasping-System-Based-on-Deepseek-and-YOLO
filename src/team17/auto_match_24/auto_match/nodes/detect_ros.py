@@ -237,6 +237,12 @@ class Detector:
         self.detected_bowls = []
         # bowl位置差异阈值，如果超过这个值则认为是新的bowl
         self.bowl_position_threshold = 20
+        
+        # 订阅重置bowl列表的触发信号
+        self.reset_sub = rospy.Subscriber(
+            "/reset_bowl_list", String, self.reset_bowl_list_cb, queue_size=1
+        )
+        rospy.loginfo("已添加重置bowl列表的触发信号订阅者")
 
     def display_detection_results(self):
         """单独的线程用于显示检测结果"""
@@ -443,6 +449,15 @@ class Detector:
             rospy.logerr(f"Failed to convert ROS message to OpenCV image: {str(e)}")
         except Exception as e:
             rospy.logerr(f"Unexpected error in image callback: {str(e)}")
+
+    # 添加重置bowl列表的回调函数
+    def reset_bowl_list_cb(self, msg):
+        """
+        接收重置bowl列表的触发信号，并清空当前bowl列表
+        """
+        rospy.loginfo("收到重置bowl列表的触发信号: " + msg.data)
+        self.detected_bowls = []
+        rospy.loginfo("已清空bowl列表，当前列表长度: 0")
 
 
 if __name__=='__main__':

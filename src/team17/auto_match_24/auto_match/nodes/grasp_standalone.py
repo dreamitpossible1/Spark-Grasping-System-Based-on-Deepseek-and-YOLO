@@ -193,6 +193,9 @@ class ArmAction:
         self.lidar_sub = rospy.Subscriber(
             "/scan", LaserScan, self.check_scan_stat, queue_size=1, buff_size=2**24)
         
+        # 添加任务完成信号发布者
+        self.task_complete_pub = rospy.Publisher("/grasp_cmd", String, queue_size=1)
+        
         # 加载排除区域的图像
         try:
             self.exclude = np.array(cv2.imread(os.path.join(
@@ -527,6 +530,23 @@ class ArmAction:
                 self.arm_default_pose()
                 self.grasp_status_pub.publish(String("0"))
                 self.complete[item] = True
+                
+                # 检查是否所有物体都已完成堆叠
+                all_complete = True
+                for key, value in self.complete.items():
+                    if not value:
+                        all_complete = False
+                        break
+                
+                # 如果所有物体都完成了堆叠，发送重置bowl列表的信号
+                if all_complete:
+                    rospy.loginfo("所有物体堆叠任务完成，发送重置bowl列表信号")
+                    self.task_complete_pub.publish(String("complete_task"))
+                    # 重置完成状态，为下一轮做准备
+                    for key in self.complete:
+                        self.complete[key] = False
+                    rospy.loginfo("已重置堆叠完成状态")
+                
                 return True
             else:
                 self.time[item] = 2
@@ -602,6 +622,10 @@ class GraspStack:
         # 添加一个定期检查的定时器
         self.check_timer = rospy.Timer(rospy.Duration(10), self.periodic_check)
         
+        # 添加重置bowl列表的发布者
+        self.reset_bowl_pub = rospy.Publisher("/reset_bowl_list", String, queue_size=1)
+        rospy.loginfo("创建重置bowl列表触发信号发布者")
+        
         rospy.loginfo("Grasp and stack node初始化完成，等待命令...")
         
     def periodic_check(self, event):
@@ -611,6 +635,12 @@ class GraspStack:
         if len(cube_list) > 0:
             rospy.loginfo(f"可见物体: {cube_list}")
         
+    def reset_bowl_list(self):
+        """发送重置bowl列表的触发信号"""
+        rospy.loginfo("发布重置bowl列表的触发信号")
+        self.reset_bowl_pub.publish(String("reset_all_bowls"))
+        rospy.loginfo("触发信号已发送")
+
     def cmd_callback(self, msg):
         """
         接收命令并执行相应操作
@@ -658,8 +688,19 @@ class GraspStack:
                 rospy.loginfo(f"可见物体: {cube_list}")
             rospy.loginfo(f"当前抓取的物体ID: {self.item_type}")
             
+        elif cmd == "reset_bowl_list":
+            # 重置bowl列表的触发命令
+            self.reset_bowl_list()
+            
+        elif cmd == "complete_task":
+            # 完成所有任务，重置bowl列表并重置机械臂
+            rospy.loginfo("完成所有任务，重置bowl列表并重置机械臂")
+            self.reset_bowl_list()
+            self.arm.arm_default_pose()
+            rospy.loginfo("任务完成，所有系统已重置")
+            
         else:
-            rospy.logwarn(f"未知命令: '{cmd}'，支持的命令有: grasp, drop, reset, check")
+            rospy.logwarn(f"未知命令: '{cmd}'，支持的命令有: grasp, drop, reset, check, reset_bowl_list, complete_task")
 
     def run(self):
         """
@@ -681,6 +722,8 @@ if __name__ == '__main__':
         rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"drop\" -1")
         rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"reset\" -1")
         rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"check\" -1")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"reset_bowl_list\" -1")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"complete_task\" -1")
         rospy.loginfo("====================================================")
         
         node = GraspStack()
