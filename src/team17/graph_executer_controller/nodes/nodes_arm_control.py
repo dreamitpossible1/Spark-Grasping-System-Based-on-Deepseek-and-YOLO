@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from NodeGraphQt import BaseNode, NodeBaseWidget
-from rclpy.node import Node
+import rospy
 from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
-from panda_arm_msg.srv import ControlRvizArm, ControlRvizArm_Request
-import rclpy
-from openai import OpenAI
-from tf2_ros import TransformException
-from tf2_ros.buffer import Buffer
-from tf2_ros.transform_listener import TransformListener
-from geometry_msgs.msg import TransformStamped
+from swiftpro.msg import SwiftproState
+from swiftpro.msg import position
+from swiftpro.msg import status
 import json
-from rclpy.node import Node
+from openai import OpenAI
 import re
 from Qt import QtCore, QtWidgets
 
@@ -57,48 +53,59 @@ class PandaArmDeepSeekControlNode(BaseNode):
 
         self.is_created_node = False
 
-    def create_ros2_node(self,):
-        """"""
-        self.srv_node = Node(self.NODE_NAME.replace(' ', '_'))
-        self.cli = self.srv_node.create_client(ControlRvizArm, 'control_rviz_arm')
-        self.sub_end_pose = self.srv_node.create_subscription(
-            Float64MultiArray,
-            '/end_effector_pose',
+    def create_ros_node(self,):
+        """创建ROS节点和相关的发布者、订阅者"""
+        # 初始化ROS节点
+        if not rospy.get_node_uri():
+            rospy.init_node(self.NODE_NAME.replace(' ', '_'), anonymous=True)
+        
+        # 创建发布者，用于发送位置控制命令
+        self.pub_position = rospy.Publisher('position_write_topic', position, queue_size=10)
+        self.pub_gripper = rospy.Publisher('gripper_topic', status, queue_size=10)
+        
+        # 创建订阅者，接收SwiftproState信息
+        self.sub_end_pose = rospy.Subscriber(
+            'SwiftproState_topic',
+            SwiftproState,
             self.end_pose_listener_callback,
-            10)
-        self.sub_end_pose  # prevent unused variable warning
-
+            queue_size=10)
+        
         self.end_pose = None
         self.is_get_end_pose = False
         self.is_created_node = True
 
-    def delete_ros2_node(self,):
-        """"""
-        self.srv_node.destroy_node()
-        self.is_created_node = False
+    def delete_ros_node(self,):
+        """清理ROS节点资源"""
+        if self.is_created_node:
+            self.sub_end_pose.unregister()
+            self.is_created_node = False
 
     def end_pose_listener_callback(self, msg):
-        """"""
-        self.end_pose = msg
-        # print(f"end_pose: {self.end_pose}")
+        """接收机械臂末端位置的回调函数"""
+        self.end_pose = [msg.x, msg.y, msg.z, 0.0, 0.0, 0.0, 1.0]  # 使用默认方向值
         self.is_get_end_pose = True
 
     def execute(self):
-        """"""
+        """执行节点逻辑"""
         if not self.is_created_node:
-            self.create_ros2_node()
-
-        while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.srv_node.get_logger().info('service not available, waiting again...')
+            self.create_ros_node()
 
         # 获取语音节点的文本输入
         text_in = self.input(0).connected_ports()[0].node().text_out
         
         # 通过话题获取当前的机械臂位置状态
-        # position, rotation = self.get_end_effector_pose()
-        while not self.is_get_end_pose:
-            rclpy.spin_once(self.srv_node)
-        end_pose = self.end_pose.data[:]
+        timeout_counter = 0
+        while not self.is_get_end_pose and timeout_counter < 50:
+            rospy.sleep(0.1)
+            timeout_counter += 1
+            
+        if not self.is_get_end_pose:
+            self.messageSignal.emit(f'{self.NODE_NAME}获取机械臂位置超时!')
+            self.text_out = "获取机械臂位置失败!"
+            self.delete_ros_node()
+            return
+            
+        end_pose = self.end_pose[:]
         # 重置标志位
         self.is_get_end_pose = False
 
@@ -129,34 +136,31 @@ class PandaArmDeepSeekControlNode(BaseNode):
         # 加判断，解析返回的json数据
         data_json = json.loads(assistant_message)
         self.messageSignal.emit(f'{self.NODE_NAME}的LLM输出：{data_json}')
-        # self.text_out = data_json['answer']
-        # self.messageSignal.emit(assistant_message)
-
-        # 解析返回信号，通过服务发送位置信号
-        request = ControlRvizArm_Request()
-        request.position = [float(data_json['position.x']), 
-                            float(data_json['position.y']), 
-                            float(data_json['position.z']),
-                            float(data_json['orientation.x']),
-                            float(data_json['orientation.y']),
-                            float(data_json['orientation.z']),
-                            float(data_json['orientation.w'])]
-        request.open_or_close = data_json['gripper_state']
         
-        future = self.cli.call_async(request)
-        rclpy.spin_until_future_complete(self.srv_node, future)
+        # 创建控制消息
+        pos_msg = position()
+        pos_msg.x = float(data_json['position.x'])
+        pos_msg.y = float(data_json['position.y'])
+        pos_msg.z = float(data_json['position.z'])
+        pos_msg.speed = 1000  # 设置默认速度
+        
+        # 发送位置控制消息
+        self.pub_position.publish(pos_msg)
+        
+        # 创建夹爪控制消息
+        gripper_msg = status()
+        gripper_msg.status = 1 if data_json['gripper_state'] == 'close' else 0
+        
+        # 发送夹爪控制消息
+        self.pub_gripper.publish(gripper_msg)
+        
+        # 等待执行完成
+        rospy.sleep(3.0)  # 给机械臂足够的时间来执行动作
+        
+        self.messageSignal.emit(f'{self.NODE_NAME}命令已发送')
+        self.text_out = data_json['answer'] + "执行完成！"
 
-        response = future.result()
-
-        if response.success:
-            self.messageSignal.emit(f'{request.position} execution was successful.\n')
-            self.text_out = data_json['answer'] + "执行成功！"
-        else:
-            self.messageSignal.emit(f'{request.position} execution failed.\n')
-            self.text_out = data_json['answer'] + "执行失败！"
-
-        self.delete_ros2_node()
-
+        self.delete_ros_node()
         self.messageSignal.emit(f'{self.NODE_NAME} executed.')
 
     def set_messageSignal(self, messageSignal):
@@ -184,7 +188,7 @@ class MyCustomWidget(QtWidgets.QWidget):
     def get_end_pose(self,):
         """"""
         if not self.node_obj.is_created_node:
-            self.node_obj.create_ros2_node()
+            self.node_obj.create_ros_node()
         self.node_obj.get_end_pose()
         self.node_obj.get_joint_states()
 
@@ -227,74 +231,92 @@ class PandaArmControlNode(BaseNode):
         self.add_text_input('orientation.x', 'orientation.x', text='0.0')
         self.add_text_input('orientation.y', 'orientation.y', text='0.0')
         self.add_text_input('orientation.z', 'orientation.z', text='0.0')
-        self.add_text_input('orientation.w', 'orientation.w', text='0.0')
+        self.add_text_input('orientation.w', 'orientation.w', text='1.0')
 
         self.add_combo_menu('gripper_state', 'gripper_state', items=['open', 'close'])
 
         self.is_created_node = False
 
-    def create_ros2_node(self,):
-        self.srv_node = Node(self.NODE_NAME.replace(' ', '_'))
-        self.cli = self.srv_node.create_client(ControlRvizArm, 'control_rviz_arm')
-        self.sub_end_pose = self.srv_node.create_subscription(
-            Float64MultiArray,
-            '/end_effector_pose',
+    def create_ros_node(self,):
+        """创建ROS节点和相关的发布者、订阅者"""
+        if not rospy.get_node_uri():
+            rospy.init_node(self.NODE_NAME.replace(' ', '_'), anonymous=True)
+        
+        # 创建发布者，用于发送位置控制命令
+        self.pub_position = rospy.Publisher('position_write_topic', position, queue_size=10)
+        self.pub_gripper = rospy.Publisher('gripper_topic', status, queue_size=10)
+        
+        # 创建订阅者，接收SwiftproState信息
+        self.sub_end_pose = rospy.Subscriber(
+            'SwiftproState_topic',
+            SwiftproState,
             self.end_pose_listener_callback,
-            10)
-        self.sub_end_pose  # prevent unused variable warning
+            queue_size=10)
+            
+        self.sub_joint_states = rospy.Subscriber(
+            '/joint_states',
+            JointState,
+            self.joint_states_listener_callback,
+            queue_size=10)
+            
         self.end_pose = None
         self.is_get_end_pose = False
-
-        self.sub_joint_states = self.srv_node.create_subscription(
-            JointState,
-            '/joint_states',
-            self.joint_states_listener_callback,
-            10)
-        self.sub_joint_states  # prevent unused variable warning
         self.joint_states = None
         self.is_get_joint_states = False
-
-        self.is_created_node=True
+        
+        self.is_created_node = True
     
-    def delete_ros2_node(self,):
-        """"""
-        self.srv_node.destroy_node()
-        self.is_created_node = False
+    def delete_ros_node(self,):
+        """清理ROS节点资源"""
+        if self.is_created_node:
+            self.sub_end_pose.unregister()
+            self.sub_joint_states.unregister()
+            self.is_created_node = False
     
     def joint_states_listener_callback(self, msg):
-        """"""
+        """接收关节状态的回调函数"""
         self.joint_states = msg
-        # print(f"end_pose: {self.end_pose}")
         self.is_get_joint_states = True
 
     def end_pose_listener_callback(self, msg):
-        """"""
-        self.end_pose = msg
-        # print(f"end_pose: {self.end_pose}")
+        """接收机械臂末端位置的回调函数"""
+        self.end_pose = [msg.x, msg.y, msg.z, 0.0, 0.0, 0.0, 1.0]  # 使用默认方向值
         self.is_get_end_pose = True
 
     def get_joint_states(self,):
-        """"""
-        while not self.is_get_joint_states:
-            rclpy.spin_once(self.srv_node)
+        """获取关节状态"""
+        timeout_counter = 0
+        while not self.is_get_joint_states and timeout_counter < 50:
+            rospy.sleep(0.1)
+            timeout_counter += 1
+            
+        if not self.is_get_joint_states:
+            return
+            
         joint_states = self.joint_states
-        self.is_get_joint_states=False
-        finger_joint_posi = joint_states.position[-1]
-        if finger_joint_posi < 0.01:
-            self.set_property('gripper_state', 'close')
-        else:
-            self.set_property('gripper_state', 'open')
-        # print(finger_joint_posi)
+        self.is_get_joint_states = False
+        
+        if joint_states and len(joint_states.position) > 0:
+            finger_joint_posi = joint_states.position[-1]
+            if finger_joint_posi < 0.01:
+                self.set_property('gripper_state', 'close')
+            else:
+                self.set_property('gripper_state', 'open')
     
     def get_end_pose(self,):
-        # 通过话题获取当前的机械臂位置状态
-        while not self.is_get_end_pose:
-            rclpy.spin_once(self.srv_node)
-        end_pose = self.end_pose.data[:]
-        # 重置标志位
+        """获取机械臂末端位置"""
+        timeout_counter = 0
+        while not self.is_get_end_pose and timeout_counter < 50:
+            rospy.sleep(0.1)
+            timeout_counter += 1
+            
+        if not self.is_get_end_pose:
+            return None
+            
+        end_pose = self.end_pose[:]
         self.is_get_end_pose = False
 
-        # set property
+        # 设置属性
         self.set_property('position.x', str(end_pose[0]))
         self.set_property('position.y', str(end_pose[1]))
         self.set_property('position.z', str(end_pose[2]))
@@ -306,41 +328,34 @@ class PandaArmControlNode(BaseNode):
         return end_pose
 
     def execute(self):
-        """"""
+        """执行节点逻辑"""
         if not self.is_created_node:
-            self.create_ros2_node()
-        while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service not available, waiting again...')
-        # 通过服务发送位置信号
-        request = ControlRvizArm_Request()
-        request.position = [float(self.get_property('position.x')), 
-                            float(self.get_property('position.y')), 
-                            float(self.get_property('position.z')),
-                            float(self.get_property('orientation.x')),
-                            float(self.get_property('orientation.y')),
-                            float(self.get_property('orientation.z')),
-                            float(self.get_property('orientation.w'))]
-        request.open_or_close = self.get_property('gripper_state')
-
-        # text_in = self.input(0).connected_ports()[0].node().text_out
-
-        # 通过话题获取当前的机械臂位置状态
-        # end_pose = self.get_end_pose()
- 
-        future = self.cli.call_async(request)
-        rclpy.spin_until_future_complete(self.srv_node, future)
-
-        response = future.result()
-
-        if response.success:
-            self.messageSignal.emit(f'{request.position} execution was successful.')
-            self.text_out = "执行成功！"
-        else:
-            self.messageSignal.emit(f'{request.position} execution failed.')
-            self.text_out = "执行失败！"
+            self.create_ros_node()
+            
+        # 创建位置控制消息
+        pos_msg = position()
+        pos_msg.x = float(self.get_property('position.x'))
+        pos_msg.y = float(self.get_property('position.y'))
+        pos_msg.z = float(self.get_property('position.z'))
+        pos_msg.speed = 1000  # 设置默认速度
         
-        self.delete_ros2_node()
-
+        # 发送位置控制消息
+        self.pub_position.publish(pos_msg)
+        
+        # 创建夹爪控制消息
+        gripper_msg = status()
+        gripper_msg.status = 1 if self.get_property('gripper_state') == 'close' else 0
+        
+        # 发送夹爪控制消息
+        self.pub_gripper.publish(gripper_msg)
+        
+        # 等待执行完成
+        rospy.sleep(3.0)  # 给机械臂足够的时间来执行动作
+        
+        self.messageSignal.emit(f'位置 [{pos_msg.x}, {pos_msg.y}, {pos_msg.z}] 执行成功.')
+        self.text_out = "执行成功！"
+        
+        self.delete_ros_node()
         self.messageSignal.emit(f'{self.NODE_NAME} executed.')
 
     def set_messageSignal(self, messageSignal):
