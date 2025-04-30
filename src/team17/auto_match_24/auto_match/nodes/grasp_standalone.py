@@ -626,6 +626,10 @@ class GraspStack:
         self.reset_bowl_pub = rospy.Publisher("/reset_bowl_list", String, queue_size=1)
         rospy.loginfo("创建重置bowl列表触发信号发布者")
         
+        # 添加物料检测控制发布者
+        self.detection_control_pub = rospy.Publisher("/grasp_cmd", String, queue_size=1)
+        rospy.loginfo("创建物料检测控制信号发布者")
+        
         rospy.loginfo("Grasp and stack node初始化完成，等待命令...")
         
     def periodic_check(self, event):
@@ -653,14 +657,25 @@ class GraspStack:
         rospy.loginfo(f"收到命令: '{cmd}'")
         
         if cmd == "grasp":
+            # 暂停物料检测更新
+            rospy.loginfo("暂停物料检测更新...")
+            self.detection_control_pub.publish(String("pause"))
+            rospy.sleep(0.5)  # 等待命令生效
+            
             # 执行抓取
             rospy.loginfo("开始执行抓取操作...")
             self.item_type = self.arm.grasp()
             rospy.loginfo(f"抓取完成，物体类型: {self.item_type}")
             if self.item_type == 0:
                 rospy.logwarn("未能找到或抓取物体!")
+                # 恢复物料检测更新
+                rospy.loginfo("恢复物料检测更新...")
+                self.detection_control_pub.publish(String("resume"))
             elif self.item_type == 1:
                 rospy.logwarn("抓取可能不成功，需要重试")
+                # 恢复物料检测更新
+                rospy.loginfo("恢复物料检测更新...")
+                self.detection_control_pub.publish(String("resume"))
             else:
                 rospy.loginfo(f"成功抓取ID为{self.item_type}的物体")
             
@@ -671,6 +686,11 @@ class GraspStack:
                 self.arm.drop(self.item_type)
                 rospy.loginfo(f"放置完成，物体: {self.item_type}")
                 self.item_type = 0
+                
+                # 恢复物料检测更新
+                rospy.loginfo("恢复物料检测更新...")
+                self.detection_control_pub.publish(String("resume"))
+                rospy.sleep(0.5)  # 等待命令生效
             else:
                 rospy.logwarn("没有抓取的物体，无法执行放置操作")
                 
@@ -679,6 +699,10 @@ class GraspStack:
             rospy.loginfo("重置机械臂到默认位置...")
             self.arm.arm_default_pose()
             rospy.loginfo("机械臂重置完成")
+            
+            # 恢复物料检测更新
+            rospy.loginfo("恢复物料检测更新...")
+            self.detection_control_pub.publish(String("resume"))
             
         elif cmd == "check":
             # 检查当前状态
@@ -698,6 +722,10 @@ class GraspStack:
             self.reset_bowl_list()
             self.arm.arm_default_pose()
             rospy.loginfo("任务完成，所有系统已重置")
+            
+        elif cmd == "pause" or cmd == "resume":
+            # 这些命令由检测器处理，这里不做任何操作
+            rospy.loginfo(f"收到检测控制命令: {cmd}，由检测器处理")
             
         else:
             rospy.logwarn(f"未知命令: '{cmd}'，支持的命令有: grasp, drop, reset, check, reset_bowl_list, complete_task")
@@ -724,6 +752,13 @@ if __name__ == '__main__':
         rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"check\" -1")
         rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"reset_bowl_list\" -1")
         rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"complete_task\" -1")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"pause\" -1  # 暂停物料检测更新")
+        rospy.loginfo("  - rostopic pub /grasp_cmd std_msgs/String \"resume\" -1  # 恢复物料检测更新")
+        rospy.loginfo("====================================================")
+        rospy.loginfo("物料检测控制逻辑：")
+        rospy.loginfo("  - 执行抓取时自动暂停物料检测更新")
+        rospy.loginfo("  - 完成抓取或失败时自动恢复物料检测更新")
+        rospy.loginfo("  - 检测到3个bowl时不再更新bowl列表")
         rospy.loginfo("====================================================")
         
         node = GraspStack()

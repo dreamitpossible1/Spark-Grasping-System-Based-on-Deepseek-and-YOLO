@@ -238,11 +238,22 @@ class Detector:
         # bowl位置差异阈值，如果超过这个值则认为是新的bowl
         self.bowl_position_threshold = 20
         
+        # 添加抓取流程状态标志
+        self.grasp_in_progress = False
+        # 最大检测bowl数量
+        self.MAX_BOWLS = 3
+        
         # 订阅重置bowl列表的触发信号
         self.reset_sub = rospy.Subscriber(
             "/reset_bowl_list", String, self.reset_bowl_list_cb, queue_size=1
         )
         rospy.loginfo("已添加重置bowl列表的触发信号订阅者")
+        
+        # 订阅抓取命令信号，用于暂停/恢复物料检测
+        self.grasp_cmd_sub = rospy.Subscriber(
+            "/grasp_cmd", String, self.grasp_cmd_cb, queue_size=1
+        )
+        rospy.loginfo("已添加抓取命令订阅者，用于控制物料检测状态")
 
     def display_detection_results(self):
         """单独的线程用于显示检测结果"""
@@ -320,6 +331,15 @@ class Detector:
                 # 临时保存当前帧检测到的其他物体信息（非bowl类型）
                 non_bowl_objects = []
                 
+                # 检查是否应该更新bowl列表
+                should_update_bowls = not self.grasp_in_progress and len(self.detected_bowls) < self.MAX_BOWLS
+                
+                if not should_update_bowls:
+                    if self.grasp_in_progress:
+                        rospy.logdebug("抓取流程进行中，暂停更新bowl列表")
+                    elif len(self.detected_bowls) >= self.MAX_BOWLS:
+                        rospy.logdebug(f"已达到最大bowl数量 ({self.MAX_BOWLS})，不再更新bowl列表")
+                
                 # 第一步：处理所有检测到的物体，更新bowl列表
                 for i in range(len(results.name)):
                     name = results.name[i]
@@ -342,7 +362,7 @@ class Detector:
                     confidence = results.confidence[i]
                     
                     # 特殊处理bowl物体
-                    if name == 'bowl':
+                    if name == 'bowl' and should_update_bowls:
                         # 检查是否为新的bowl
                         is_new_bowl = True
                         found_similar_bowl = False
@@ -369,10 +389,13 @@ class Detector:
                                     break
                             
                             # 如果与所有已存在的bowl都不同，则添加为新bowl
-                            if not found_similar_bowl:
+                            if not found_similar_bowl and len(self.detected_bowls) < self.MAX_BOWLS:
                                 rospy.loginfo(f"检测到新的bowl: ({center_x}, {center_y})，与已有bowl都不同")
                                 self.detected_bowls.append((center_x, center_y, size_x, size_y, confidence))
                                 current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
+                    elif name == 'bowl' and not should_update_bowls:
+                        # 即使不更新列表，也需要将当前检测到的bowl加入临时列表，用于显示
+                        current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
                     else:
                         # 非bowl类型的物体，直接添加到临时列表
                         non_bowl_objects.append({
@@ -385,7 +408,7 @@ class Detector:
                         })
                 
                 # 更新已检测bowl列表，只保留当前帧中存在的bowl
-                if len(current_frame_bowls) > 0:
+                if len(current_frame_bowls) > 0 and should_update_bowls:
                     # 不直接替换列表，而是更新列表中已存在的bowl位置，并保留未在当前帧检测到的bowl
                     # 创建一个映射表，记录哪些已有bowl在当前帧中被找到了
                     found_bowl_indices = set()
@@ -406,8 +429,8 @@ class Detector:
                                 match_found = True
                                 break
                         
-                        # 如果没有找到匹配的bowl，则添加为新bowl
-                        if not match_found:
+                        # 如果没有找到匹配的bowl，则添加为新bowl（如果未达到最大数量）
+                        if not match_found and len(self.detected_bowls) < self.MAX_BOWLS:
                             self.detected_bowls.append(current_bowl)
                     
                     rospy.loginfo(f"Bowl列表更新完成: 当前帧检测到 {len(current_frame_bowls)} 个bowl，总共跟踪 {len(self.detected_bowls)} 个bowl")
@@ -490,6 +513,34 @@ class Detector:
         self.detected_bowls = []
         rospy.loginfo("已清空bowl列表，当前列表长度: 0")
 
+    # 添加抓取命令的回调函数
+    def grasp_cmd_cb(self, msg):
+        """
+        接收抓取命令信号，并根据信号控制物料检测状态
+        只处理 pause 和 resume 命令，其他命令由 grasp_standalone.py 处理
+        """
+        cmd = msg.data
+        
+        # 只处理物料检测状态控制命令
+        if cmd == "pause":
+            rospy.loginfo("收到暂停检测命令: 物料检测状态设为暂停")
+            self.grasp_in_progress = True
+            
+            # 记录当前状态
+            rospy.loginfo(f"当前已检测到 {len(self.detected_bowls)} 个bowls")
+            if len(self.detected_bowls) >= self.MAX_BOWLS:
+                rospy.loginfo(f"已达到最大检测数量 ({self.MAX_BOWLS})")
+                
+        elif cmd == "resume":
+            rospy.loginfo("收到恢复检测命令: 物料检测状态设为恢复")
+            self.grasp_in_progress = False
+            
+            # 记录当前状态
+            rospy.loginfo(f"当前已检测到 {len(self.detected_bowls)} 个bowls")
+            if len(self.detected_bowls) >= self.MAX_BOWLS:
+                rospy.loginfo(f"已达到最大检测数量 ({self.MAX_BOWLS})，即使恢复也不会继续检测")
+        # 其他命令不处理
+
 
 if __name__=='__main__':
     rospy.init_node('detector_node')
@@ -499,6 +550,12 @@ if __name__=='__main__':
     rospy.loginfo("窗口操作:")
     rospy.loginfo("  - 按ESC或q键关闭窗口")
     rospy.loginfo("  - 检测结果同时发布到/objects话题")
+    rospy.loginfo("====================================================")
+    rospy.loginfo("物料检测控制功能:")
+    rospy.loginfo("  - 通过 /grasp_cmd 话题接收 \"pause\" 和 \"resume\" 命令")
+    rospy.loginfo("  - 抓取过程中不更新bowl列表")
+    rospy.loginfo("  - 当检测到3个bowl时停止更新列表")
+    rospy.loginfo("  - 通过 /reset_bowl_list 话题可以重置bowl列表")
     rospy.loginfo("====================================================")
     
     obj=Detector()
