@@ -345,27 +345,34 @@ class Detector:
                     if name == 'bowl':
                         # 检查是否为新的bowl
                         is_new_bowl = True
+                        found_similar_bowl = False
                         
-                        for existing_bowl in self.detected_bowls:
-                            # 计算与已存在bowl的距离
-                            dx = abs(center_x - existing_bowl[0])
-                            dy = abs(center_y - existing_bowl[1])
-                            
-                            # 如果距离小于阈值，认为是同一个bowl
-                            if dx <= self.bowl_position_threshold and dy <= self.bowl_position_threshold:
-                                is_new_bowl = False
-                                # 将当前检测到的bowl位置记录到当前帧bowls列表中
-                                # 同时记录大小和置信度信息
-                                current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
-                                rospy.logdebug(f"检测到已知bowl: ({center_x}, {center_y}), 与已存在bowl({existing_bowl[0]}, {existing_bowl[1]})距离: dx={dx}, dy={dy}")
-                                break
-                        
-                        # 如果是新的bowl，添加到已检测bowl列表
-                        if is_new_bowl:
-                            # 记录位置、大小和置信度信息
+                        # 如果列表为空，则直接添加
+                        if not self.detected_bowls:
+                            rospy.loginfo(f"Bowl列表为空，直接添加新bowl: ({center_x}, {center_y})")
                             self.detected_bowls.append((center_x, center_y, size_x, size_y, confidence))
                             current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
-                            rospy.loginfo(f"检测到新的bowl: ({center_x}, {center_y})")
+                        else:
+                            # 与所有已检测到的bowl进行比较
+                            for existing_bowl in self.detected_bowls:
+                                # 计算与已存在bowl的距离
+                                dx = abs(center_x - existing_bowl[0])
+                                dy = abs(center_y - existing_bowl[1])
+                                
+                                # 如果距离小于阈值，认为是同一个bowl
+                                if dx <= self.bowl_position_threshold and dy <= self.bowl_position_threshold:
+                                    found_similar_bowl = True
+                                    # 将当前检测到的bowl位置记录到当前帧bowls列表中
+                                    # 使用当前检测的位置信息更新列表（可能更准确）
+                                    current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
+                                    rospy.logdebug(f"检测到已知bowl: ({center_x}, {center_y}), 与已存在bowl({existing_bowl[0]}, {existing_bowl[1]})距离: dx={dx}, dy={dy}")
+                                    break
+                            
+                            # 如果与所有已存在的bowl都不同，则添加为新bowl
+                            if not found_similar_bowl:
+                                rospy.loginfo(f"检测到新的bowl: ({center_x}, {center_y})，与已有bowl都不同")
+                                self.detected_bowls.append((center_x, center_y, size_x, size_y, confidence))
+                                current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
                     else:
                         # 非bowl类型的物体，直接添加到临时列表
                         non_bowl_objects.append({
@@ -379,33 +386,57 @@ class Detector:
                 
                 # 更新已检测bowl列表，只保留当前帧中存在的bowl
                 if len(current_frame_bowls) > 0:
-                    self.detected_bowls = current_frame_bowls
+                    # 不直接替换列表，而是更新列表中已存在的bowl位置，并保留未在当前帧检测到的bowl
+                    # 创建一个映射表，记录哪些已有bowl在当前帧中被找到了
+                    found_bowl_indices = set()
+                    
+                    # 遍历当前帧中的所有bowl
+                    for current_bowl in current_frame_bowls:
+                        # 查找是否与已有列表中的bowl匹配
+                        match_found = False
+                        for i, existing_bowl in enumerate(self.detected_bowls):
+                            # 比较位置是否接近
+                            dx = abs(current_bowl[0] - existing_bowl[0])
+                            dy = abs(current_bowl[1] - existing_bowl[1])
+                            
+                            if dx <= self.bowl_position_threshold and dy <= self.bowl_position_threshold:
+                                # 找到匹配的bowl，更新其位置信息
+                                self.detected_bowls[i] = current_bowl
+                                found_bowl_indices.add(i)
+                                match_found = True
+                                break
+                        
+                        # 如果没有找到匹配的bowl，则添加为新bowl
+                        if not match_found:
+                            self.detected_bowls.append(current_bowl)
+                    
+                    rospy.loginfo(f"Bowl列表更新完成: 当前帧检测到 {len(current_frame_bowls)} 个bowl，总共跟踪 {len(self.detected_bowls)} 个bowl")
                 
                 # 第二步：根据跟踪列表构建并发布消息
                 
-                # 1. 首先添加所有非bowl类型的物体
-                for obj_info in non_bowl_objects:
-                    obj = Detection2D()
-                    obj.header = data.header
-                    obj_hypothesis = ObjectHypothesisWithPose()
+                # # 1. 首先添加所有非bowl类型的物体
+                # for obj_info in non_bowl_objects:
+                #     obj = Detection2D()
+                #     obj.header = data.header
+                #     obj_hypothesis = ObjectHypothesisWithPose()
                     
-                    if obj_info['name'] in self.obj_id:
-                        obj_hypothesis.id = int(self.obj_id[obj_info['name']])
-                    else:
-                        for cls_id, cls_name in self.detector.model.model.names.items():
-                            if cls_name == obj_info['name']:
-                                obj_hypothesis.id = int(cls_id)
-                                break
+                #     if obj_info['name'] in self.obj_id:
+                #         obj_hypothesis.id = int(self.obj_id[obj_info['name']])
+                #     else:
+                #         for cls_id, cls_name in self.detector.model.model.names.items():
+                #             if cls_name == obj_info['name']:
+                #                 obj_hypothesis.id = int(cls_id)
+                #                 break
                     
-                    obj_hypothesis.score = obj_info['confidence']
-                    obj.results.append(obj_hypothesis)
-                    obj.bbox.size_y = obj_info['size_y']
-                    obj.bbox.size_x = obj_info['size_x']
-                    obj.bbox.center.x = obj_info['center_x']
-                    obj.bbox.center.y = obj_info['center_y']
-                    objArray.detections.append(obj)
-                    published_objects += 1
-                    rospy.loginfo(f"发布物体到话题: {obj_info['name']}, 置信度: {obj_info['confidence']:.2f}, 位置: ({obj_info['center_x']}, {obj_info['center_y']})")
+                #     obj_hypothesis.score = obj_info['confidence']
+                #     obj.results.append(obj_hypothesis)
+                #     obj.bbox.size_y = obj_info['size_y']
+                #     obj.bbox.size_x = obj_info['size_x']
+                #     obj.bbox.center.x = obj_info['center_x']
+                #     obj.bbox.center.y = obj_info['center_y']
+                #     objArray.detections.append(obj)
+                #     published_objects += 1
+                #     rospy.loginfo(f"发布物体到话题: {obj_info['name']}, 置信度: {obj_info['confidence']:.2f}, 位置: ({obj_info['center_x']}, {obj_info['center_y']})")
                 
                 # 2. 然后从跟踪列表中添加所有bowl
                 for bowl_info in self.detected_bowls:
