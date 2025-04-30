@@ -251,88 +251,190 @@ class ArmAction:
         if len(cube_list) == 0:
             rospy.logwarn("筛选后没有可抓取的物体，退出抓取流程")
             return 0
-            
-        # 寻找最佳抓取目标（选择y坐标最大的物体，即最靠近底部的物体）
-        closest_x = cube_list[0][1][0]
-        closest_y = cube_list[0][1][1]
-        id = cube_list[0][0]
-        rospy.loginfo(f"初始目标: ID={id}, 位置=({closest_x}, {closest_y})")
+
+        # 根据y坐标对物体列表进行排序（从远到近）
+        cube_list.sort(key=lambda x: x[1][1])
         
-        for pice in cube_list:
-            xp = pice[1][0]
-            yp = pice[1][1]
-            if yp > closest_y:
-                closest_x = xp
-                closest_y = yp
-                id = pice[0]
-                rospy.loginfo(f"找到更优目标: ID={id}, 位置=({closest_x}, {closest_y})")
+        # 处理三个bowl的情况
+        if len(cube_list) == 3:
+            rospy.loginfo("检测到3个bowl，开始执行堆叠流程")
+            # 最近的bowl作为放置点
+            target_bowl = cube_list[-1]
+            target_x = self.x_kb[0] * target_bowl[1][1] + self.x_kb[1]
+            target_y = self.y_kb[0] * target_bowl[1][0] + self.y_kb[1]
+            
+            # 处理其他两个bowl
+            for bowl in cube_list[:-1]:
+                # 移动到bowl上方
+                x = self.x_kb[0] * bowl[1][1] + self.x_kb[1]
+                y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
+                z = -10.0
                 
-        rospy.loginfo(f"最终选择目标: ID={id}, 位置在: {closest_x}, {closest_y}")
-        
-        # 获取机械臂目标位置
-        x = self.x_kb[0] * closest_y + self.x_kb[1]
-        y = self.y_kb[0] * closest_x + self.y_kb[1]
-        z = -10.0
-        rospy.loginfo(f"转换为机械臂坐标: x={x}, y={y}, z={z}")
-        
-        # 机械臂移动到目标位置上方
-        rospy.loginfo("移动机械臂到目标上方...")
-        self.interface.set_pose(x, y, z + 40)
-        rospy.sleep(2.5)
-        
-        # 机械臂移动到目标位置
-        rospy.loginfo("移动机械臂到目标位置...")
-        self.interface.set_pose(x, y, z)
-        rospy.sleep(2.0)
-
-
-        # 打开气泵，进行吸取
-        rospy.loginfo("启动气泵进行吸取...")
-        self.interface.set_pump(True)
-        rospy.sleep(1.0)
-        
-        # 抬起目标方块
-        rospy.loginfo("抬起物体...")
-        self.interface.set_pose(x, y, z + 120)
-        rospy.sleep(2.0)
-        
-        rospy.loginfo("将机械臂移动到安全位置...")
-        self.arm_default_pose()
-        rospy.sleep(1.75)
-        
-        # 检查是否成功抓取
-        rospy.loginfo("检查抓取是否成功...")
-        
-        # 以下逻辑使用更可靠的方法判断抓取成功
-        # 方法1: 根据相机检测状态判断
-        grasp_success = self.cam.check_if_grasp(closest_x, closest_y, timeout=1.5, confidence=0.3)
-        
-        # 方法2: 也可以使用简化的判断逻辑，假设机械臂正常运行则大概率抓取成功
-        # grasp_success = True
-        
-        if not grasp_success:
-            rospy.logwarn("抓取可能失败，重置机械臂...")
-            self.interface.set_pump(False)  # 确保关闭气泵
-            rospy.sleep(0.5)
-            self.reset_pub.publish(position(10, 150, 160, 0))
-            return 1
+                rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方...")
+                self.interface.set_pose(x, y, z + 40)
+                rospy.sleep(2.0)
+                
+                # 下移并开启吸盘
+                rospy.loginfo("下移并开启吸盘...")
+                self.interface.set_pose(x, y, z)
+                rospy.sleep(2.0)
+                self.interface.set_pump(True)
+                rospy.sleep(1.0)
+                
+                # 上抬
+                rospy.loginfo("上抬bowl...")
+                self.interface.set_pose(x, y, z + 120)
+                rospy.sleep(2.0)
+                
+                # 移动到放置点上方
+                rospy.loginfo("移动到放置点上方...")
+                self.interface.set_pose(target_x, target_y, z + 120)
+                rospy.sleep(2.0)
+                
+                # 下移到z=-5
+                rospy.loginfo("下移到z=-5...")
+                self.interface.set_pose(target_x, target_y, -5)
+                rospy.sleep(2.0)
+                
+                # 下移到z=0
+                rospy.loginfo("下移到z=0...")
+                self.interface.set_pose(target_x, target_y, 0)
+                rospy.sleep(1.0)
+                
+                # 关闭吸盘
+                rospy.loginfo("释放bowl...")
+                self.interface.set_pump(False)
+                rospy.sleep(1.0)
+                
+                # 上抬到安全位置
+                rospy.loginfo("上抬到安全位置...")
+                self.interface.set_pose(target_x, target_y, z + 120)
+                rospy.sleep(2.0)
             
-        rospy.loginfo(f"抓取成功，物体ID: {id}")
-        self.grasp_status_pub.publish(String("0"))
-        
-        # 更新堆叠次数
-        if id in self.time and self.time[id] < 3:
-            self.time[id] += 1
-            rospy.loginfo(f"物体ID={id}的堆叠次数更新为: {self.time[id]}")
+            rospy.loginfo("三个bowl堆叠完成")
+            return 3
+            
+        # 处理两个bowl的情况
+        elif len(cube_list) == 2:
+            rospy.loginfo("检测到2个bowl，开始执行堆叠流程")
+            # 较近的bowl作为放置点
+            target_bowl = cube_list[-1]
+            target_x = self.x_kb[0] * target_bowl[1][1] + self.x_kb[1]
+            target_y = self.y_kb[0] * target_bowl[1][0] + self.y_kb[1]
+            
+            # 处理较远的bowl
+            bowl = cube_list[0]
+            x = self.x_kb[0] * bowl[1][1] + self.x_kb[1]
+            y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
+            z = -10.0
+            
+            rospy.loginfo(f"移动到远处bowl (ID={bowl[0]}) 上方...")
+            self.interface.set_pose(x, y, z + 40)
+            rospy.sleep(2.0)
+            
+            # 下移并开启吸盘
+            rospy.loginfo("下移并开启吸盘...")
+            self.interface.set_pose(x, y, z)
+            rospy.sleep(2.0)
+            self.interface.set_pump(True)
+            rospy.sleep(1.0)
+            
+            # 上抬
+            rospy.loginfo("上抬bowl...")
+            self.interface.set_pose(x, y, z + 120)
+            rospy.sleep(2.0)
+            
+            # 移动到放置点上方
+            rospy.loginfo("移动到放置点上方...")
+            self.interface.set_pose(target_x, target_y, z + 120)
+            rospy.sleep(2.0)
+            
+            # 下移到z=-5
+            rospy.loginfo("下移到z=-5...")
+            self.interface.set_pose(target_x, target_y, -5)
+            rospy.sleep(2.0)
+            
+            # 下移到z=0
+            rospy.loginfo("下移到z=0...")
+            self.interface.set_pose(target_x, target_y, 0)
+            rospy.sleep(1.0)
+            
+            # 关闭吸盘
+            rospy.loginfo("释放bowl...")
+            self.interface.set_pump(False)
+            rospy.sleep(1.0)
+            
+            # 上抬到安全位置
+            rospy.loginfo("上抬到安全位置...")
+            self.interface.set_pose(target_x, target_y, z + 120)
+            rospy.sleep(2.0)
+            
+            rospy.loginfo("两个bowl堆叠完成")
+            return 2
+            
+        # 如果只有一个bowl或其他情况，执行原有的抓取逻辑
         else:
-            if id not in self.time:
-                rospy.logwarn(f"未在堆叠记录中找到ID={id}，默认不更新堆叠次数")
-                # 添加新ID到time字典
-                self.time[id] = 1
-                rospy.loginfo(f"已添加新ID={id}到堆叠记录，初始堆叠次数: 1")
+            # 原有的抓取逻辑
+            closest_x = cube_list[0][1][0]
+            closest_y = cube_list[0][1][1]
+            id = cube_list[0][0]
+            
+            # 获取机械臂目标位置
+            x = self.x_kb[0] * closest_y + self.x_kb[1]
+            y = self.y_kb[0] * closest_x + self.y_kb[1]
+            z = -10.0
+            rospy.loginfo(f"转换为机械臂坐标: x={x}, y={y}, z={z}")
+            
+            # 机械臂移动到目标位置上方
+            rospy.loginfo("移动机械臂到目标上方...")
+            self.interface.set_pose(x, y, z + 40)
+            rospy.sleep(2.5)
+            
+            # 机械臂移动到目标位置
+            rospy.loginfo("移动机械臂到目标位置...")
+            self.interface.set_pose(x, y, z)
+            rospy.sleep(2.0)
+
+            # 打开气泵，进行吸取
+            rospy.loginfo("启动气泵进行吸取...")
+            self.interface.set_pump(True)
+            rospy.sleep(1.0)
+            
+            # 抬起目标方块
+            rospy.loginfo("抬起物体...")
+            self.interface.set_pose(x, y, z + 120)
+            rospy.sleep(2.0)
+            
+            rospy.loginfo("将机械臂移动到安全位置...")
+            self.arm_default_pose()
+            rospy.sleep(1.75)
+            
+            # 检查是否成功抓取
+            rospy.loginfo("检查抓取是否成功...")
+            grasp_success = self.cam.check_if_grasp(closest_x, closest_y, timeout=1.5, confidence=0.3)
+            
+            if not grasp_success:
+                rospy.logwarn("抓取可能失败，重置机械臂...")
+                self.interface.set_pump(False)  # 确保关闭气泵
+                rospy.sleep(0.5)
+                self.reset_pub.publish(position(10, 150, 160, 0))
+                return 1
                 
-        rospy.loginfo("====== 抓取流程结束 ======")
-        return id
+            rospy.loginfo(f"抓取成功，物体ID: {id}")
+            self.grasp_status_pub.publish(String("0"))
+            
+            # 更新堆叠次数
+            if id in self.time and self.time[id] < 3:
+                self.time[id] += 1
+                rospy.loginfo(f"物体ID={id}的堆叠次数更新为: {self.time[id]}")
+            else:
+                if id not in self.time:
+                    rospy.logwarn(f"未在堆叠记录中找到ID={id}，默认不更新堆叠次数")
+                    self.time[id] = 1
+                    rospy.loginfo(f"已添加新ID={id}到堆叠记录，初始堆叠次数: 1")
+                    
+            rospy.loginfo("====== 抓取流程结束 ======")
+            return id
 
     def drop(self, item):
         """
@@ -372,7 +474,7 @@ class ArmAction:
         z = z + 25
         self.interface.set_pose(x, y, z)
         rospy.sleep(0.5)
-        self.interface.set_pose(200, 110, 175, 250)
+        self.interface.set_pose(200, 110, 175, 1000)
         rospy.sleep(0.75)
         self.arm_default_pose()
         self.grasp_status_pub.publish(String("0"))
@@ -452,7 +554,7 @@ class ArmAction:
             z = z + 25
             self.interface.set_pose(x, y, z)
             rospy.sleep(0.5)
-            self.interface.set_pose(200, 110, 175, 250)
+            self.interface.set_pose(200, 110, 175, 1000)
             rospy.sleep(0.75)
             self.arm_default_pose()
             self.grasp_status_pub.publish(String("0"))
@@ -541,7 +643,7 @@ class ArmAction:
                 z = z + 25
                 self.interface.set_pose(x, y, z)
                 rospy.sleep(0.5)
-                self.interface.set_pose(200, 110, 175, 250)
+                self.interface.set_pose(200, 110, 175, 1000)
                 rospy.sleep(0.75)
                 self.arm_default_pose()
                 self.grasp_status_pub.publish(String("0"))
@@ -616,7 +718,7 @@ class ArmAction:
         '''
         移动机械臂到摄像头看不到的地方，以方便识别与抓取
         '''
-        self.interface.set_pose(10, 170, 160, 100)
+        self.interface.set_pose(10, 170, 160, 1000)
         rospy.sleep(1.0)
 
 
