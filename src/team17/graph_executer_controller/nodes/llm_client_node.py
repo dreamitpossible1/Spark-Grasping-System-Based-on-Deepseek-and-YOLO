@@ -59,23 +59,31 @@ class LLMClientNode(BaseNode):
         
         # Message history for LLM conversation
         system_prompt = """
-                        你是一个六自由度的机械臂，其中的answer答复要有拟人性。
-
-                        请按照用户的意图给出机械臂末端的位置和姿态。
-
-                        json输出示例:
-                        {
-                            "position.x": 0.3,
-                            "position.y": 0.3,
-                            "position.z": 0.2,
-                            "orientation.x": 0.0,
-                            "orientation.y": 0.0,
-                            "orientation.z": 0.0,
-                            "orientation.w": 1.0,
-                            "gripper_state": "open", #只有open和close
-                            "answer": "已给出目标位置和姿态，后续将进行规划执行动作。"
-                        }
-                        """
+            你是一个六自由度机械臂控制助手，需要根据用户的意图，规划出机械臂末端的位置（position）和姿态（orientation），并决定吸盘状态（pump_state）。你的回答必须严格以 JSON 格式输出，并包括以下字段：
+            
+            - position.x: float，单位mm
+            - position.y: float，单位mm
+            - position.z: float，单位mm
+            - orientation.x: float（四元数）
+            - orientation.y: float
+            - orientation.z: float
+            - orientation.w: float
+            - pump_state: "on" 或 "off"（控制吸盘开关状态）
+            - answer: 拟人化地简述你理解的用户意图以及接下来的操作
+            
+            请仅返回 JSON 对象，格式示例如下：
+            {
+              "position.x": 100.0,
+              "position.y": 100.0,
+              "position.z": 100.0,
+              "orientation.x": 0.0,
+              "orientation.y": 0.0,
+              "orientation.z": 0.0,
+              "orientation.w": 1.0,
+              "pump_state": "on",
+              "answer": "目标位置已设定，准备开始动作执行。"
+            }
+            """
         system_message = {"role": "system", "content": system_prompt}
         self.messages = [system_message]
 
@@ -136,6 +144,14 @@ class LLMClientNode(BaseNode):
             return False
         
         try:
+            # 处理pump_state，转换为适合机械臂使用的格式
+            if 'pump_state' in command_data:
+                pump_state = 1 if command_data['pump_state'].lower() == 'on' else 0
+                
+                # 为了操作吸盘，需要发布pump_topic消息
+                # 通过socket请求robot_control_server发布
+                command_data['pump_value'] = pump_state
+            
             # Send command request
             request = {
                 "command": "execute_command",
@@ -194,17 +210,20 @@ class LLMClientNode(BaseNode):
         
         # Prepare prompt for LLM
         user_prompt = f"""
-                        机械臂末端的当前位置和姿态是： 
-                        "position.x": {robot_state['position.x']},
-                        "position.y": {robot_state['position.y']},
-                        "position.z": {robot_state['position.z']},
-                        "orientation.x": {robot_state['orientation.x']},
-                        "orientation.y": {robot_state['orientation.y']},
-                        "orientation.z": {robot_state['orientation.z']},
-                        "orientation.w": {robot_state['orientation.w']},
-                        用户的意图是：{text_in}
-                    """
-        
+        当前机械臂末端的状态如下：
+        - position.x: {robot_state['position.x']}
+        - position.y: {robot_state['position.y']}
+        - position.z: {robot_state['position.z']}
+        - orientation.x: {robot_state['orientation.x']}
+        - orientation.y: {robot_state['orientation.y']}
+        - orientation.z: {robot_state['orientation.z']}
+        - orientation.w: {robot_state['orientation.w']}
+        - pump_state: {robot_state['pump_state']}  # 吸盘状态 on/off
+
+        用户意图是：{text_in}
+
+        请你根据以上信息，输出一个新的 JSON 动作指令。
+        """
         self.messages.append({"role": "user", "content": user_prompt})
         self.log_message(f"LLM Input: {user_prompt}")
         

@@ -31,6 +31,7 @@ class RobotControlServer:
         self.running = False
         self.socket = None
         self.clients = []
+        self.pump_status = 0  # 保存当前吸盘状态（0=off, 1=on）
         
         # Initialize ROS node and subscribers/publishers
         self.create_ros_node()
@@ -40,9 +41,9 @@ class RobotControlServer:
         if not rospy.get_node_uri():
             rospy.init_node(self.node_name, anonymous=True)
         
-        # Create publishers for position and gripper control
+        # Create publishers for position and pump control
         self.pub_position = rospy.Publisher('position_write_topic', position, queue_size=10)
-        self.pub_gripper = rospy.Publisher('gripper_topic', status, queue_size=10)
+        self.pub_pump = rospy.Publisher('pump_topic', status, queue_size=10)
         
         # Create subscribers for robot state
         self.sub_end_pose = rospy.Subscriber(
@@ -63,6 +64,7 @@ class RobotControlServer:
     def end_pose_listener_callback(self, msg):
         """Callback for robot end effector pose"""
         self.end_pose = [msg.x, msg.y, msg.z, 0.0, 0.0, 0.0, 1.0]  # Default orientation values
+        self.pump_status = msg.pump  # 更新当前吸盘状态
         self.is_get_end_pose = True
     
     def joint_states_listener_callback(self, msg):
@@ -86,26 +88,19 @@ class RobotControlServer:
         self.is_get_end_pose = False
         return end_pose
     
-    def get_gripper_state(self):
-        """Get the current gripper state (open/close)"""
-        # Wait for joint states data
+    def get_pump_state(self):
+        """Get the current pump state (on/off)"""
+        # Wait for end pose data which also contains pump status
         timeout_counter = 0
-        while not self.is_get_joint_states and timeout_counter < 50:
+        while not self.is_get_end_pose and timeout_counter < 50:
             rospy.sleep(0.1)
             timeout_counter += 1
         
-        if not self.is_get_joint_states:
-            rospy.logwarn("Failed to get joint states (timeout)")
+        if not self.is_get_end_pose:
+            rospy.logwarn("Failed to get end effector pose with pump state (timeout)")
             return "unknown"
         
-        joint_states = self.joint_states
-        self.is_get_joint_states = False
-        
-        if joint_states and len(joint_states.position) > 0:
-            finger_joint_posi = joint_states.position[-1]
-            return "close" if finger_joint_posi < 0.01 else "open"
-        
-        return "unknown"
+        return "on" if self.pump_status == 1 else "off"
     
     def execute_robot_command(self, command_data):
         """Execute a robot control command"""
@@ -117,18 +112,28 @@ class RobotControlServer:
             pos_msg.z = float(command_data['position.z'])
             pos_msg.speed = 1000  # Default speed
             
-            # Extract gripper state
-            gripper_msg = status()
-            gripper_msg.status = 1 if command_data['gripper_state'] == 'close' else 0
+            # Extract pump state (if provided)
+            if 'pump_value' in command_data or 'pump_state' in command_data:
+                pump_msg = status()
+                
+                # Check pump_value first (direct numeric value)
+                if 'pump_value' in command_data:
+                    pump_msg.status = int(command_data['pump_value'])
+                # Fall back to pump_state (string "on"/"off")
+                elif 'pump_state' in command_data:
+                    pump_msg.status = 1 if command_data['pump_state'].lower() == 'on' else 0
+                
+                # Send pump command
+                self.pub_pump.publish(pump_msg)
+                rospy.loginfo(f"Pump command sent: {'on' if pump_msg.status == 1 else 'off'}")
             
-            # Send commands
+            # Send position command
             self.pub_position.publish(pos_msg)
-            self.pub_gripper.publish(gripper_msg)
             
             # Wait for execution
             rospy.sleep(3.0)
             
-            rospy.loginfo(f"Command executed: position [{pos_msg.x}, {pos_msg.y}, {pos_msg.z}], gripper: {command_data['gripper_state']}")
+            rospy.loginfo(f"Command executed: position [{pos_msg.x}, {pos_msg.y}, {pos_msg.z}]")
             return {"status": "success", "message": "Command executed successfully"}
             
         except Exception as e:
@@ -153,7 +158,7 @@ class RobotControlServer:
                 # Process request based on command type
                 if request["command"] == "get_robot_state":
                     end_pose = self.get_end_pose()
-                    gripper_state = self.get_gripper_state()
+                    pump_state = self.get_pump_state()
                     
                     if end_pose:
                         response = {
@@ -165,7 +170,7 @@ class RobotControlServer:
                             "orientation.y": end_pose[4],
                             "orientation.z": end_pose[5],
                             "orientation.w": end_pose[6],
-                            "gripper_state": gripper_state
+                            "pump_state": pump_state
                         }
                     else:
                         response = {"status": "error", "message": "Failed to get robot state"}

@@ -43,7 +43,7 @@ except ImportError:
     class PandaArmDeepSeekControlNode(BaseNode):
         """Legacy node pointing to use the new client-server architecture"""
         __identifier__ = 'nodes.arm.control'
-        NODE_NAME = 'panda arm controlled by deepseek'
+        NODE_NAME = 'uArm controlled by deepseek'
 
         def __init__(self):
             super(PandaArmDeepSeekControlNode, self).__init__()
