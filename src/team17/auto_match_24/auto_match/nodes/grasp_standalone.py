@@ -283,6 +283,9 @@ class ArmAction:
             target_x = self.x_kb[0] * target_bowl[1][1] + self.x_kb[1]
             target_y = self.y_kb[0] * target_bowl[1][0] + self.y_kb[1]
             
+            # 记录当前已堆叠的bowl数量，用于确定下一个bowl的高度
+            stacked_bowls = 0
+            
             # 处理其他两个bowl
             for bowl in cube_list[:-1]:
                 # 移动到bowl上方
@@ -290,8 +293,8 @@ class ArmAction:
                 y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
                 z = -10.0
                 
-                rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+40})")
-                self.interface.set_pose(x, y, z + 40)
+                rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+60})")
+                self.interface.set_pose(x, y, z + 60)
                 rospy.sleep(2.0)
                 
                 # 下移并开启吸盘
@@ -311,14 +314,17 @@ class ArmAction:
                 self.interface.set_pose(target_x, target_y, z + 120)
                 rospy.sleep(2.0)
                 
-                # 下移到z=-5
-                rospy.loginfo("下移到z=-5...")
-                self.interface.set_pose(target_x, target_y, -5)
+                # 根据当前堆叠数量确定释放高度
+                release_height = 40 * stacked_bowls
+                
+                # 下移到释放高度上方5厘米
+                rospy.loginfo(f"下移到释放高度上方5厘米: z={release_height+50}...")
+                self.interface.set_pose(target_x, target_y, release_height + 50)
                 rospy.sleep(2.0)
                 
-                # 下移到z=0
-                rospy.loginfo("下移到z=0...")
-                self.interface.set_pose(target_x, target_y, 0)
+                # 下移到释放高度
+                rospy.loginfo(f"下移到释放高度: z={release_height}...")
+                self.interface.set_pose(target_x, target_y, release_height)
                 rospy.sleep(1.0)
                 
                 # 关闭吸盘
@@ -330,6 +336,10 @@ class ArmAction:
                 rospy.loginfo("上抬到安全位置...")
                 self.interface.set_pose(target_x, target_y, z + 120)
                 rospy.sleep(2.0)
+                
+                # 增加已堆叠数量
+                stacked_bowls += 1
+                rospy.loginfo(f"已堆叠bowl数量: {stacked_bowls}")
             
             rospy.loginfo("三个bowl堆叠完成")
             return 3
@@ -369,13 +379,13 @@ class ArmAction:
             self.interface.set_pose(target_x, target_y, z + 120)
             rospy.sleep(2.0)
             
-            # 下移到z=-5
-            rospy.loginfo("下移到z=-5...")
-            self.interface.set_pose(target_x, target_y, -5)
+            # 下移到释放高度上方5厘米
+            rospy.loginfo("下移到释放高度上方5厘米: z=5...")
+            self.interface.set_pose(target_x, target_y, 5)
             rospy.sleep(2.0)
             
-            # 下移到z=0
-            rospy.loginfo("下移到z=0...")
+            # 下移到释放高度
+            rospy.loginfo("下移到释放高度: z=0...")
             self.interface.set_pose(target_x, target_y, 0)
             rospy.sleep(1.0)
             
