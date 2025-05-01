@@ -310,7 +310,7 @@ class ArmAction:
                 self.interface.set_pose(x, y, z)
                 rospy.sleep(2.0)
                 self.interface.set_pump(True)
-                rospy.sleep(1.0)
+                rospy.sleep(1.5)
                 
                 # 上抬
                 rospy.loginfo("上抬bowl...")
