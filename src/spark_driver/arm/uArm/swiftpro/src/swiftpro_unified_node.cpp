@@ -20,6 +20,7 @@
 #include <swiftpro/angle2nd.h>
 #include <swiftpro/angle1st.h>
 #include <swiftpro/buzzer.h>
+#include <thread>
 #include <mutex>
 
 serial::Serial _serial;                // serial object
@@ -361,7 +362,7 @@ void pump_callback(const swiftpro::status& msg)
 void buzzer_callback(const swiftpro::buzzer& buzzer)
 {
     ROS_INFO("=== Buzzer Control Callback Called ===");
-    ROS_INFO("Setting buzzer: frequency=%d Hz, time=%d seconds", 
+    ROS_INFO("Setting buzzer: frequency=%d Hz, time=%.1f seconds", 
              buzzer.frequent, buzzer.time);
     
     std::string Gcode = "";
