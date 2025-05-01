@@ -1,9 +1,9 @@
 # coding=utf-8
 
 import os, time
-from utils.general import find_dir_path
+from src.team17.graph_executer_controller.utils.general import find_dir_path
 from PySide6.QtWidgets import QWidget
-from ui.ui_messageconsole import Ui_MessageConsole
+from src.team17.graph_executer_controller.ui.ui_messageconsole import Ui_MessageConsole
 from PySide6.QtCore import Slot
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

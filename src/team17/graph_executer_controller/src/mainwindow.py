@@ -1,15 +1,15 @@
 # coding=utf-8
-from ui.ui_mainwindow import Ui_MainWindow, QObject
+from src.team17.graph_executer_controller.ui.ui_mainwindow import Ui_MainWindow, QObject
 from PySide6.QtWidgets import QMainWindow
 from PySide6.QtCore import QSettings
-from utils.general import *
-from  src.messageconsole import MessageConsole
+from src.team17.graph_executer_controller.utils.general import *
+from src.team17.graph_executer_controller.src.messageconsole import MessageConsole
 from PySide6.QtCore import Signal, Slot, QSize
 import datetime
 from PySide6.QtGui import QIcon
-from src.updatelog import UpdateLog
+from src.team17.graph_executer_controller.src.updatelog import UpdateLog
 from collections import OrderedDict
-from src.GraphFlow import GraphFlow
+from src.team17.graph_executer_controller.src.GraphFlow import GraphFlow
 import webbrowser
 import json
 

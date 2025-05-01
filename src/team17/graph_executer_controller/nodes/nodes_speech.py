@@ -7,7 +7,7 @@ from vosk import Model, KaldiRecognizer, SetLogLevel
 import pyaudio
 import json
 import numpy as np
-from utils.general import download_and_extract_zip
+from src.team17.graph_executer_controller.utils.general import download_and_extract_zip
 import wave
 import edge_tts
 import asyncio

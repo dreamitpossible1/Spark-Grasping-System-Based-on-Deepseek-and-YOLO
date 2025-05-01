@@ -1,1 +1,1 @@
-from .nodes_register import *
+from src.team17.graph_executer_controller.src.GraphFlow.nodes_register import *

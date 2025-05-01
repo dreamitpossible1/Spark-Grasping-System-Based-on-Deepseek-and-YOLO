@@ -1,10 +1,11 @@
 # coding=utf-8
 
 import os, time
-from utils.general import find_dir_path
+from src.team17.graph_executer_controller.utils.general import find_dir_path
 from PySide6.QtWidgets import QDialog
-from ui.ui_updatelog import Ui_Dialog
+from src.team17.graph_executer_controller.ui.ui_updatelog import Ui_Dialog
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon
+
 class UpdateLog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent=parent)

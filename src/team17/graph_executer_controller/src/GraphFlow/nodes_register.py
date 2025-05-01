@@ -10,8 +10,8 @@ from NodeGraphQt import (
 from threading import Thread
 
 # import example nodes from the "nodes" sub-package
-from nodes import *
-import nodes
+from src.team17.graph_executer_controller.nodes import *
+import src.team17.graph_executer_controller.nodes as nodes
 
 # 然后正常使用 NodeGraphQt
 BASE_PATH = Path(__file__).parent.resolve()
