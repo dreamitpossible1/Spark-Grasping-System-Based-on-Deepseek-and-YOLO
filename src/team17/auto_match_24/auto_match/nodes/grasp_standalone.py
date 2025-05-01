@@ -26,7 +26,7 @@ class SwiftProInterface:
             "swiftpro_status_topic", status, queue_size=1)    # 机械臂开关状态发布者
         rospy.loginfo("SwiftProInterface初始化完成")
 
-    def set_pose(self, x, y, z, speed=1000):
+    def set_pose(self, x, y, z, speed=800):
         '''
         发布机械臂运动位置
         '''
@@ -47,16 +47,16 @@ class SwiftProInterface:
         if enable:
             rospy.loginfo("启动气泵 (吸取)")
             # 确保吸取命令被执行
-            for i in range(2):
+            for i in range(3):  # 增加到3次
                 self.arm_pump_pub.publish(status(1))
-                rospy.sleep(0.3)  # 发送后短暂等待
+                rospy.sleep(0.5)  # 增加等待时间
             rospy.loginfo("已多次发送吸取命令")
         else:
             rospy.loginfo("关闭气泵 (释放)")
             # 确保释放命令被执行，多次发送释放命令
-            for i in range(2):
+            for i in range(4):  # 增加到4次以确保可靠性
                 self.arm_pump_pub.publish(status(0))
-                rospy.sleep(0.3)  # 发送后短暂等待
+                rospy.sleep(0.5)  # 增加等待时间
             rospy.loginfo("已多次发送释放命令")
 
     def set_status(self, lock: bool):
@@ -240,6 +240,10 @@ class ArmAction:
         cube_list_tmp = self.cam.detector()
         rospy.loginfo(f"detector返回 {len(cube_list_tmp)} 个物体")
         
+        # 打印所有检测到的物体信息
+        for i, item in enumerate(cube_list_tmp):
+            rospy.loginfo(f"检测到物体 #{i+1}: ID={item[0]}, 位置=({item[1][0]}, {item[1][1]})")
+        
         if len(cube_list_tmp) == 0:
             rospy.logwarn("未检测到任何物体，退出抓取流程")
             return 0
@@ -286,7 +290,8 @@ class ArmAction:
         # 处理三个bowl的情况
         if len(cube_list) == 3 and all_bowls:
             rospy.loginfo("检测到3个bowl，开始执行堆叠流程")
-            # 最近的bowl作为放置点
+            
+            # 最近的bowl（最后一个bowl）作为放置点
             target_bowl = cube_list[-1]
             target_x = self.x_kb[0] * target_bowl[1][1] + self.x_kb[1]
             target_y = self.y_kb[0] * target_bowl[1][0] + self.y_kb[1]
@@ -294,8 +299,15 @@ class ArmAction:
             # 记录当前已堆叠的bowl数量，用于确定下一个bowl的高度
             stacked_bowls = 0
             
+            # 获取要处理的bowl列表（除了目标bowl外的所有bowl）
+            bowls_to_process = cube_list[:-1]
+            rospy.loginfo(f"目标bowl(放置点)位置: ({target_bowl[1][0]}, {target_bowl[1][1]})")
+            rospy.loginfo(f"需要处理 {len(bowls_to_process)} 个bowl进行堆叠")
+            
             # 处理其他两个bowl
-            for bowl in cube_list[:-1]:
+            for idx, bowl in enumerate(bowls_to_process):
+                rospy.loginfo(f"处理第 {idx+1}/{len(bowls_to_process)} 个bowl...")
+                
                 # 移动到bowl上方
                 x = self.x_kb[0] * bowl[1][1] + self.x_kb[1]
                 y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
@@ -323,11 +335,14 @@ class ArmAction:
                 rospy.sleep(3.0)
                 
                 # 根据当前堆叠数量确定释放高度
-                release_height = -5+5 * stacked_bowls
+                # 第一个bowl放在z=-5, 第二个bowl放在z=0
+                release_heights = [-5, 0]
+                release_height = release_heights[stacked_bowls] if stacked_bowls < len(release_heights) else release_heights[-1]
                 
                 # 下移到释放高度上方5厘米
-                rospy.loginfo(f"下移到释放高度上方5厘米: z={release_height+50}...")
-                self.interface.set_pose(target_x, target_y, release_height + 50)
+                approach_height = release_height + 50  # 留出足够的空间
+                rospy.loginfo(f"下移到释放高度上方: z={approach_height}...")
+                self.interface.set_pose(target_x, target_y, approach_height)
                 rospy.sleep(3.0)
                 
                 # 下移到释放高度
@@ -344,15 +359,26 @@ class ArmAction:
                 rospy.loginfo("已发送多次关闭吸盘命令")
                 rospy.sleep(1.0)
                 
-                # 上抬到安全位置
+                # 先小幅上抬，防止卡住
+                rospy.loginfo("释放后小幅上抬，防止卡住...")
+                self.interface.set_pose(target_x, target_y, release_height + 15)
+                rospy.sleep(1.5)
+                
+                # 再上抬到安全位置
                 rospy.loginfo("上抬到安全位置...")
                 self.interface.set_pose(target_x, target_y, z + 120)
                 rospy.sleep(3.0)
 
                 # 增加已堆叠数量
                 stacked_bowls += 1
-                rospy.loginfo(f"已堆叠bowl数量: {stacked_bowls}")
+                rospy.loginfo(f"已堆叠bowl数量: {stacked_bowls}/{len(bowls_to_process)}")
             
+            # 再次确认堆叠结果
+            if stacked_bowls == len(bowls_to_process):
+                rospy.loginfo(f"全部 {stacked_bowls} 个bowl堆叠完成！")
+            else:
+                rospy.logwarn(f"只完成了 {stacked_bowls}/{len(bowls_to_process)} 个bowl的堆叠")
+                
             rospy.loginfo("三个bowl堆叠完成")
             return 3
             
@@ -409,6 +435,11 @@ class ArmAction:
                 rospy.sleep(0.5)
             rospy.loginfo("已发送多次关闭吸盘命令")
             rospy.sleep(1.0)
+            
+            # 先小幅上抬，防止卡住
+            rospy.loginfo("释放后小幅上抬，防止卡住...")
+            self.interface.set_pose(target_x, target_y, 10)  # 上抬到z=10
+            rospy.sleep(1.5)
             
             # 上抬到安全位置
             rospy.loginfo("上抬到安全位置...")
