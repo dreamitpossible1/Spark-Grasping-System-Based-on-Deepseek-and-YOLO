@@ -202,6 +202,9 @@ class Detector:
         self.object_pub = rospy.Publisher("/objects", Detection2DArray, queue_size=1)
         self.bridge = CvBridge()
         
+        # 添加日志控制标志
+        self.enable_logging = True  # 默认启用日志输出
+        
         try:
             self.detector = SparkDetect(os.environ['HOME'] + "/yolov5s.pt")
         except Exception as e:
@@ -304,19 +307,19 @@ class Detector:
 
                 # 添加检测结果的详细信息打印
                 if len(results.name) == 0:
-                    rospy.loginfo("未检测到任何物体")
+                    self.log_info("未检测到任何物体")
                 else:
-                    rospy.loginfo(f"\n检测到 {len(results.name)} 个物体:")
-                    rospy.loginfo("-" * 50)
-                    rospy.loginfo(f"{'类别':<15}{'置信度':<10}{'坐标 (x, y)':<20}{'大小 (w, h)'}")
-                    rospy.loginfo("-" * 50)
+                    self.log_info(f"\n检测到 {len(results.name)} 个物体:")
+                    self.log_info("-" * 50)
+                    self.log_info(f"{'类别':<15}{'置信度':<10}{'坐标 (x, y)':<20}{'大小 (w, h)'}")
+                    self.log_info("-" * 50)
                     
                     for i in range(len(results.name)):
                         name = results.name[i]
                         conf = results.confidence[i]
                         x, y = results.x[i], results.y[i]
                         w, h = results.size_x[i], results.size_y[i]
-                        rospy.loginfo(f"{name:<15}{conf:.2f}      ({x:>4}, {y:>4})      ({w:>4}, {h:>4})")
+                        self.log_info(f"{name:<15}{conf:.2f}      ({x:>4}, {y:>4})      ({w:>4}, {h:>4})")
 
                 # 更新最新检测图像用于显示
                 with self.image_lock:
@@ -369,7 +372,7 @@ class Detector:
                         
                         # 如果列表为空，则直接添加
                         if not self.detected_bowls:
-                            rospy.loginfo(f"Bowl列表为空，直接添加新bowl: ({center_x}, {center_y})")
+                            self.log_info(f"Bowl列表为空，直接添加新bowl: ({center_x}, {center_y})")
                             self.detected_bowls.append((center_x, center_y, size_x, size_y, confidence))
                             current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
                         else:
@@ -390,7 +393,7 @@ class Detector:
                             
                             # 如果与所有已存在的bowl都不同，则添加为新bowl
                             if not found_similar_bowl and len(self.detected_bowls) < self.MAX_BOWLS:
-                                rospy.loginfo(f"检测到新的bowl: ({center_x}, {center_y})，与已有bowl都不同")
+                                self.log_info(f"检测到新的bowl: ({center_x}, {center_y})，与已有bowl都不同")
                                 self.detected_bowls.append((center_x, center_y, size_x, size_y, confidence))
                                 current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
                     elif name == 'bowl' and not should_update_bowls:
@@ -433,7 +436,7 @@ class Detector:
                         if not match_found and len(self.detected_bowls) < self.MAX_BOWLS:
                             self.detected_bowls.append(current_bowl)
                     
-                    rospy.loginfo(f"Bowl列表更新完成: 当前帧检测到 {len(current_frame_bowls)} 个bowl，总共跟踪 {len(self.detected_bowls)} 个bowl")
+                    self.log_info(f"Bowl列表更新完成: 当前帧检测到 {len(current_frame_bowls)} 个bowl，总共跟踪 {len(self.detected_bowls)} 个bowl")
                 
                 # 第二步：根据跟踪列表构建并发布消息
                 
@@ -477,18 +480,18 @@ class Detector:
                     obj.bbox.center.y = bowl_info[1]  # center_y
                     objArray.detections.append(obj)
                     published_objects += 1
-                    rospy.loginfo(f"从跟踪列表发布bowl到话题: 置信度: {bowl_info[4]:.2f}, 位置: ({bowl_info[0]}, {bowl_info[1]})")
+                    self.log_info(f"从跟踪列表发布bowl到话题: 置信度: {bowl_info[4]:.2f}, 位置: ({bowl_info[0]}, {bowl_info[1]})")
                 
                 if published_objects > 0:
-                    rospy.loginfo(f"总共发布了 {published_objects} 个物体到 /objects 话题")
-                    rospy.loginfo(f"当前跟踪的bowl数量: {len(self.detected_bowls)}")
+                    self.log_info(f"总共发布了 {published_objects} 个物体到 /objects 话题")
+                    self.log_info(f"当前跟踪的bowl数量: {len(self.detected_bowls)}")
                 else:
-                    rospy.loginfo("没有物体被发布到话题 (可能是置信度低于阈值或不在目标列表中)")
+                    self.log_info("没有物体被发布到话题 (可能是置信度低于阈值或不在目标列表中)")
 
             except Exception as e:
-                rospy.logerr(f"Detection error: {str(e)}")
+                self.log_error(f"Detection error: {str(e)}")
                 img_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                
+            
             if img_bgr is not None:  # Only process if we have a valid image
                 try:
                     image_out = self.bridge.cv2_to_imgmsg(img_bgr, "bgr8")
@@ -526,6 +529,10 @@ class Detector:
             rospy.loginfo("收到暂停检测命令: 物料检测状态设为暂停")
             self.grasp_in_progress = True
             
+            # 禁用详细日志输出
+            self.enable_logging = False
+            rospy.loginfo("检测节点详细日志输出已禁用，直到抓取过程结束")
+            
             # 记录当前状态
             rospy.loginfo(f"当前已检测到 {len(self.detected_bowls)} 个bowls")
             if len(self.detected_bowls) >= self.MAX_BOWLS:
@@ -535,11 +542,28 @@ class Detector:
             rospy.loginfo("收到恢复检测命令: 物料检测状态设为恢复")
             self.grasp_in_progress = False
             
+            # 恢复详细日志输出
+            self.enable_logging = True
+            rospy.loginfo("检测节点详细日志输出已恢复")
+            
             # 记录当前状态
             rospy.loginfo(f"当前已检测到 {len(self.detected_bowls)} 个bowls")
             if len(self.detected_bowls) >= self.MAX_BOWLS:
                 rospy.loginfo(f"已达到最大检测数量 ({self.MAX_BOWLS})，即使恢复也不会继续检测")
         # 其他命令不处理
+
+    def log_info(self, message):
+        """
+        根据日志控制标志决定是否输出日志
+        """
+        if self.enable_logging:
+            rospy.loginfo(message)
+
+    def log_error(self, message):
+        """
+        错误日志始终输出，不受控制标志影响
+        """
+        rospy.logerr(message)
 
 
 if __name__=='__main__':
