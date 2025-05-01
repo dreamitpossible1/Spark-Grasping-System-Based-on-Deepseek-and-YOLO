@@ -315,7 +315,7 @@ class ArmAction:
                 
                 rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+60})")
                 self.interface.set_pose(x, y, z + 60)
-                rospy.sleep(5.0)
+                rospy.sleep(6.0)
                 
                 # 下移并开启吸盘
                 rospy.loginfo("下移并开启吸盘...")
@@ -332,7 +332,7 @@ class ArmAction:
                 # 移动到放置点上方
                 rospy.loginfo(f"移动到放置点上方... 坐标: ({target_x}, {target_y}, {z+120})")
                 self.interface.set_pose(target_x, target_y, z + 120)
-                rospy.sleep(5.0)
+                rospy.sleep(6.0)
                 
                 # 根据当前堆叠数量确定释放高度
                 # 第一个bowl放在z=-5, 第二个bowl放在z=0
