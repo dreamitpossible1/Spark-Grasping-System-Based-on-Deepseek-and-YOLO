@@ -6,10 +6,8 @@
 # --------------------------------------------------------------------
 import sys, os, time, threading
 from src.team17.graph_executer_controller.src.mainwindow import MainWindow
-from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtWidgets import QApplication, QStyleFactory
+from PySide6.QtWidgets import QApplication, QMessageBox, QStyleFactory
 from PySide6.QtGui import QFont, QPalette, QColor
-import rclpy
 
 def style(qApp):
     qApp.setStyleSheet(
@@ -64,7 +62,6 @@ def style(qApp):
 # sys.excepthook = handle_exception
 
 if __name__ == '__main__':
-    rclpy.init(args=None)
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
