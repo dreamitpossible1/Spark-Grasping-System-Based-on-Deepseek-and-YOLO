@@ -5,7 +5,7 @@
   <arg name="log_output" default="screen" doc="日志输出位置: screen 或 log"/>
   
   <!-- 启动机器人控制服务器节点 -->
-  <node name="robot_control_server" pkg="team17" type="start_robot_server.py" output="$(arg log_output)" required="true">
+  <node name="robot_control_server" pkg="auto_match" type="start_robot_server.py" output="$(arg log_output)" required="true">
     <param name="host" value="$(arg host)"/>
     <param name="port" value="$(arg port)"/>
   </node>
@@ -15,7 +15,7 @@
   <!-- <include file="$(find swiftpro)/launch/swiftpro_state.launch"/> -->
   
   <!-- 启动 RViz 可视化工具 (可选) -->
-  <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find team17)/rviz/robot_control.rviz" if="$(arg launch_rviz)"/> -->
+  <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find auto_match)/rviz/robot_control.rviz" if="$(arg launch_rviz)"/> -->
   
   <!-- 输出启动信息 -->
   <node name="startup_info" pkg="rostopic" type="rostopic" args="pub /robot_server_status std_msgs/String 'data: &quot;启动机器人控制服务器: $(arg host):$(arg port)&quot;'" output="screen"/>
