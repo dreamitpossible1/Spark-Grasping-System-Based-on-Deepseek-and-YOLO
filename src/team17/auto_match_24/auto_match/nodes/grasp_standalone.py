@@ -26,7 +26,7 @@ class SwiftProInterface:
             "swiftpro_status_topic", status, queue_size=1)    # 机械臂开关状态发布者
         rospy.loginfo("SwiftProInterface初始化完成")
 
-    def set_pose(self, x, y, z, speed=2000):
+    def set_pose(self, x, y, z, speed=1000):
         '''
         发布机械臂运动位置
         '''
