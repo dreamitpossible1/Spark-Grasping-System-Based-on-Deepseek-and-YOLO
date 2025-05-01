@@ -1,9 +1,38 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import rospy
 import argparse
+import sys
+import os
 from std_msgs.msg import String
-from robot_navigation import RobotNavigator
+
+# 尝试不同的导入方式来确保能找到 RobotNavigator 类
+try:
+    # 设置脚本所在目录到 Python 路径中
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.append(script_dir)
+    from robot_navigation import RobotNavigator
+except ImportError as e:
+    rospy.logerr(f"导入错误: {e}")
+    rospy.logerr("尝试备用导入方式...")
+    try:
+        # 添加完整的路径尝试
+        sys.path.append(os.path.join(os.environ['HOME'], 'spark_noetic_team17', 'Robot_manipulation'))
+        from robot_navigation import RobotNavigator
+    except ImportError as e2:
+        rospy.logerr(f"备用导入方式也失败: {e2}")
+        rospy.logerr("注意: 请确保 robot_navigation.py 文件位于正确的路径下")
+        # 创建一个简单版本的RobotNavigator以便能继续运行
+        class RobotNavigator:
+            def __init__(self):
+                """简化版本的RobotNavigator"""
+                rospy.logwarn("使用备用的RobotNavigator类，功能受限")
+                self.goto_local_pub = rospy.Publisher("mark_nav", String, queue_size=1)
+            
+            def goto_local(self, name):
+                """简化版本的导航功能"""
+                self.goto_local_pub.publish(f"go {name}")
+                return True
 
 def parse_arguments():
     """解析命令行参数"""
@@ -17,26 +46,28 @@ def main():
     """
     主程序：测试机器人导航功能
     """
-    # 解析命令行参数
-    args = parse_arguments()
-    
     # 初始化节点
     rospy.init_node('location_navigator', anonymous=True)
-    
-    # 创建导航器实例
-    navigator = RobotNavigator()
-    
-    # 创建导航命令发布者
-    nav_cmd_pub = rospy.Publisher("navigation_command", String, queue_size=1)
-    
-    # 预定义的位置
-    location_1 = "sorting_area"  # 整理区
-    location_2 = "placement_area"  # 放置区
-    
-    # 等待Publisher连接
-    rospy.sleep(1.0)
+    rospy.loginfo("导航节点初始化...")
     
     try:
+        # 解析命令行参数
+        args = parse_arguments()
+        
+        # 创建导航器实例
+        rospy.loginfo("尝试创建RobotNavigator实例...")
+        navigator = RobotNavigator()
+        
+        # 创建导航命令发布者
+        nav_cmd_pub = rospy.Publisher("navigation_command", String, queue_size=1)
+        
+        # 预定义的位置
+        location_1 = "sorting_area"  # 整理区
+        location_2 = "placement_area"  # 放置区
+        
+        # 等待Publisher连接
+        rospy.sleep(1.0)
+        
         if args.interactive:
             # 交互模式
             rospy.loginfo("=== 交互式导航模式 ===")
@@ -106,10 +137,16 @@ def main():
     except KeyboardInterrupt:
         rospy.loginfo("程序被用户中断")
     except Exception as e:
-        rospy.logerr(f"发生错误: {e}")
+        rospy.logerr(f"主程序发生错误: {e}")
+        import traceback
+        rospy.logerr(traceback.format_exc())
 
 if __name__ == "__main__":
     try:
         main()
     except rospy.ROSInterruptException:
-        pass 
+        pass
+    except Exception as e:
+        rospy.logerr(f"程序初始化错误: {e}")
+        import traceback
+        rospy.logerr(traceback.format_exc()) 
