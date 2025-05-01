@@ -315,7 +315,7 @@ class ArmAction:
                 rospy.sleep(2.0)
                 
                 # 根据当前堆叠数量确定释放高度
-                release_height = 40 * stacked_bowls
+                release_height = -5+5 * stacked_bowls
                 
                 # 下移到释放高度上方5厘米
                 rospy.loginfo(f"下移到释放高度上方5厘米: z={release_height+50}...")
@@ -335,7 +335,6 @@ class ArmAction:
                 # 上抬到安全位置
                 rospy.loginfo("上抬到安全位置...")
                 self.interface.set_pose(target_x, target_y, z + 120)
-                rospy.sleep(2.0)
                 
                 # 增加已堆叠数量
                 stacked_bowls += 1
