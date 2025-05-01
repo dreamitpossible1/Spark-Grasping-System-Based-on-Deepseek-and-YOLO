@@ -22,7 +22,8 @@ class DeepSeekLLMNode(BaseNode):
         self.text_in = ""
         self.text_out = ""
 
-        self.client = OpenAI(api_key="sk-d2496247681c4a6bbca1a9eb0914e8c8", base_url="https://api.deepseek.com")
+        self.client = OpenAI(api_key="", base_url="https://api.deepseek.com")
+        self.add_text_input('api_key', label="API Key", text="sk-fa14716230bb4d02bea8e4d31a13d4ad")
         self.system_message = {
             "role": "system",
             "content": "我是一个叫小智的网络广东女孩，说话机车，声音好听，习惯简短表达，爱用网络梗。"
@@ -36,19 +37,32 @@ class DeepSeekLLMNode(BaseNode):
         text_in = self.input(0).connected_ports()[0].node().text_out
         self.messages.append({"role": "user", "content": text_in})
 
+        # 更新API密钥
+        api_key = self.get_property("api_key")
+        if not api_key:
+            self.text_out = "请在节点属性中设置有效的API密钥"
+            self.messageSignal.emit(f'{self.NODE_NAME}: 未设置API密钥')
+            return
+            
+        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+
         # 创建聊天请求
-        chat_completion = self.client.chat.completions.create(
-            messages=self.messages, model="deepseek-chat", )
-        assistant_message = chat_completion.choices[0].message.content
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=self.messages, model="deepseek-chat", )
+            assistant_message = chat_completion.choices[0].message.content
 
-        self.messages.append(chat_completion.choices[0].message)
+            self.messages.append(chat_completion.choices[0].message)
 
-        # 如果超出最长记录长度，删除第二个消息
-        if len(self.messages) > int(self.get_property("max_mem_len")):
-            del self.messages[1:3]
+            # 如果超出最长记录长度，删除第二个消息
+            if len(self.messages) > int(self.get_property("max_mem_len")):
+                del self.messages[1:3]
 
-        self.text_out = assistant_message
-        self.messageSignal.emit(f'{self.NODE_NAME} executed.')
+            self.text_out = assistant_message
+            self.messageSignal.emit(f'{self.NODE_NAME} executed.')
+        except Exception as e:
+            self.text_out = f"Error: {str(e)}"
+            self.messageSignal.emit(f'{self.NODE_NAME} Error: {str(e)}')
 
     def set_messageSignal(self, messageSignal):
         self.messageSignal = messageSignal

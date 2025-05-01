@@ -28,7 +28,7 @@ class LLMClientNode(BaseNode):
         
         # LLM settings
         self.add_text_input('max_mem_len', label="Max Memory Length", text="20")
-        self.add_text_input('api_key', label="API Key", text="sk-bda36ce6acda4b50a00d327c32a48f80")
+        self.add_text_input('api_key', label="API Key", text="sk-fa14716230bb4d02bea8e4d31a13d4ad")
         self.add_text_input('base_url', label="API Base URL", text="https://api.deepseek.com")
         self.add_text_input('model', label="Model Name", text="deepseek-chat")
         
