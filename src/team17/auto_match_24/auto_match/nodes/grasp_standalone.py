@@ -299,28 +299,28 @@ class ArmAction:
                 # 移动到bowl上方
                 x = self.x_kb[0] * bowl[1][1] + self.x_kb[1]
                 y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
-                z = -10.0
+                z = -15.0
                 
                 rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+60})")
                 self.interface.set_pose(x, y, z + 60)
-                rospy.sleep(2.0)
+                rospy.sleep(3.0)
                 
                 # 下移并开启吸盘
                 rospy.loginfo("下移并开启吸盘...")
                 self.interface.set_pose(x, y, z)
-                rospy.sleep(2.0)
+                rospy.sleep(3.0)
                 self.interface.set_pump(True)
                 rospy.sleep(1.5)
                 
                 # 上抬
                 rospy.loginfo("上抬bowl...")
                 self.interface.set_pose(x, y, z + 120)
-                rospy.sleep(2.0)
+                rospy.sleep(3.0)
                 
                 # 移动到放置点上方
                 rospy.loginfo(f"移动到放置点上方... 坐标: ({target_x}, {target_y}, {z+120})")
                 self.interface.set_pose(target_x, target_y, z + 120)
-                rospy.sleep(2.0)
+                rospy.sleep(3.0)
                 
                 # 根据当前堆叠数量确定释放高度
                 release_height = -5+5 * stacked_bowls
@@ -328,12 +328,12 @@ class ArmAction:
                 # 下移到释放高度上方5厘米
                 rospy.loginfo(f"下移到释放高度上方5厘米: z={release_height+50}...")
                 self.interface.set_pose(target_x, target_y, release_height + 50)
-                rospy.sleep(2.0)
+                rospy.sleep(3.0)
                 
                 # 下移到释放高度
                 rospy.loginfo(f"下移到释放高度: z={release_height}...")
                 self.interface.set_pose(target_x, target_y, release_height)
-                rospy.sleep(1.0)
+                rospy.sleep(3.0)
                 
                 # 关闭吸盘
                 rospy.loginfo("释放bowl...")
@@ -347,7 +347,8 @@ class ArmAction:
                 # 上抬到安全位置
                 rospy.loginfo("上抬到安全位置...")
                 self.interface.set_pose(target_x, target_y, z + 120)
-                
+                rospy.sleep(3.0)
+
                 # 增加已堆叠数量
                 stacked_bowls += 1
                 rospy.loginfo(f"已堆叠bowl数量: {stacked_bowls}")
