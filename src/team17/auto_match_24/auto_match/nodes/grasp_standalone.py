@@ -46,10 +46,18 @@ class SwiftProInterface:
         '''
         if enable:
             rospy.loginfo("启动气泵 (吸取)")
-            self.arm_pump_pub.publish(status(1))
+            # 确保吸取命令被执行
+            for i in range(2):
+                self.arm_pump_pub.publish(status(1))
+                rospy.sleep(0.3)  # 发送后短暂等待
+            rospy.loginfo("已多次发送吸取命令")
         else:
             rospy.loginfo("关闭气泵 (释放)")
-            self.arm_pump_pub.publish(status(0))
+            # 确保释放命令被执行，多次发送释放命令
+            for i in range(2):
+                self.arm_pump_pub.publish(status(0))
+                rospy.sleep(0.3)  # 发送后短暂等待
+            rospy.loginfo("已多次发送释放命令")
 
     def set_status(self, lock: bool):
         '''
@@ -329,7 +337,11 @@ class ArmAction:
                 
                 # 关闭吸盘
                 rospy.loginfo("释放bowl...")
-                self.interface.set_pump(False)
+                # 多次发送关闭吸盘命令以确保可靠性
+                for _ in range(3):
+                    self.interface.set_pump(False)
+                    rospy.sleep(0.5)
+                rospy.loginfo("已发送多次关闭吸盘命令")
                 rospy.sleep(1.0)
                 
                 # 上抬到安全位置
@@ -357,7 +369,7 @@ class ArmAction:
             y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
             z = -10.0
             
-            rospy.loginfo(f"移动到远处bowl (ID={bowl[0]}) 上方...")
+            rospy.loginfo(f"移动到远处bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+40})")
             self.interface.set_pose(x, y, z + 40)
             rospy.sleep(2.0)
             
@@ -374,23 +386,27 @@ class ArmAction:
             rospy.sleep(2.0)
             
             # 移动到放置点上方
-            rospy.loginfo("移动到放置点上方...")
+            rospy.loginfo(f"移动到放置点上方... 坐标: ({target_x}, {target_y}, {z+120})")
             self.interface.set_pose(target_x, target_y, z + 120)
             rospy.sleep(2.0)
             
             # 下移到释放高度上方5厘米
-            rospy.loginfo("下移到释放高度上方5厘米: z=5...")
-            self.interface.set_pose(target_x, target_y, 5)
+            rospy.loginfo("下移到释放高度上方5厘米: z=-5+5=0...")
+            self.interface.set_pose(target_x, target_y, 0)
             rospy.sleep(2.0)
             
             # 下移到释放高度
-            rospy.loginfo("下移到释放高度: z=0...")
-            self.interface.set_pose(target_x, target_y, 0)
+            rospy.loginfo("下移到释放高度: z=-5...")
+            self.interface.set_pose(target_x, target_y, -5)
             rospy.sleep(1.0)
             
             # 关闭吸盘
             rospy.loginfo("释放bowl...")
-            self.interface.set_pump(False)
+            # 多次发送关闭吸盘命令以确保可靠性
+            for _ in range(3):
+                self.interface.set_pump(False)
+                rospy.sleep(0.5)
+            rospy.loginfo("已发送多次关闭吸盘命令")
             rospy.sleep(1.0)
             
             # 上抬到安全位置
