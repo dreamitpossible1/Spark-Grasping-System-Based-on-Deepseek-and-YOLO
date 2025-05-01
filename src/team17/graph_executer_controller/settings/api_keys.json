@@ -1,0 +1,10 @@
+{
+    "deepseek": {
+        "api_key": "sk-fa14716230bb4d02bea8e4d31a13d4ad",
+        "base_url": "https://api.deepseek.com"
+    },
+    "openai": {
+        "api_key": "YOUR_OPENAI_API_KEY_HERE",
+        "base_url": "https://api.openai.com/v1"
+    }
+} 

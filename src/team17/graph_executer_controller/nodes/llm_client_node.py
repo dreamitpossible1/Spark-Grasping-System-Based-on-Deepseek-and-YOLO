@@ -9,6 +9,7 @@ from NodeGraphQt import BaseNode
 import socket
 import json
 import re
+import os
 from openai import OpenAI
 from Qt import QtWidgets
 
@@ -28,9 +29,30 @@ class LLMClientNode(BaseNode):
         
         # LLM settings
         self.add_text_input('max_mem_len', label="Max Memory Length", text="20")
-        self.add_text_input('api_key', label="API Key", text="sk-fa14716230bb4d02bea8e4d31a13d4ad")
-        self.add_text_input('base_url', label="API Base URL", text="https://api.deepseek.com")
-        self.add_text_input('model', label="Model Name", text="deepseek-chat")
+        
+        # Try to load API key from config file
+        api_key = ""
+        base_url = "https://api.deepseek.com"
+        model = "deepseek-chat"
+        
+        # 获取配置文件路径
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_path = os.path.join(script_dir, "settings", "api_keys.json")
+        
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    if 'deepseek' in config and 'api_key' in config['deepseek']:
+                        api_key = config['deepseek']['api_key']
+                    if 'deepseek' in config and 'base_url' in config['deepseek']:
+                        base_url = config['deepseek']['base_url']
+        except Exception as e:
+            print(f"Error loading API key config: {e}")
+            
+        self.add_text_input('api_key', label="API Key", text=api_key)
+        self.add_text_input('base_url', label="API Base URL", text=base_url)
+        self.add_text_input('model', label="Model Name", text=model)
         
         # Initialize LLM client
         self.init_llm_client()

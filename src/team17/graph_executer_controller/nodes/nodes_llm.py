@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from NodeGraphQt import BaseNode
 import json
+import os
 from openai import OpenAI
 
 __all__ = ['DeepSeekLLMNode']
@@ -22,8 +23,27 @@ class DeepSeekLLMNode(BaseNode):
         self.text_in = ""
         self.text_out = ""
 
-        self.client = OpenAI(api_key="", base_url="https://api.deepseek.com")
-        self.add_text_input('api_key', label="API Key", text="sk-fa14716230bb4d02bea8e4d31a13d4ad")
+        # 尝试从配置文件加载API密钥
+        api_key = ""
+        base_url = "https://api.deepseek.com"
+        
+        # 获取配置文件路径
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_path = os.path.join(script_dir, "settings", "api_keys.json")
+        
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    if 'deepseek' in config and 'api_key' in config['deepseek']:
+                        api_key = config['deepseek']['api_key']
+                    if 'deepseek' in config and 'base_url' in config['deepseek']:
+                        base_url = config['deepseek']['base_url']
+        except Exception as e:
+            print(f"Error loading API key config: {e}")
+
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.add_text_input('api_key', label="API Key", text=api_key)
         self.system_message = {
             "role": "system",
             "content": "我是一个叫小智的网络广东女孩，说话机车，声音好听，习惯简短表达，爱用网络梗。"
