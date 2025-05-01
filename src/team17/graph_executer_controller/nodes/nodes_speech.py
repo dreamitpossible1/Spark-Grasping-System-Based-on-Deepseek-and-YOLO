@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from NodeGraphQt import BaseNode
-import speech_recognition as sr
 import pyttsx3, os
 from vosk import Model, KaldiRecognizer, SetLogLevel
 import pyaudio
@@ -15,7 +14,7 @@ import tempfile
 from playsound import playsound
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-__all__ = ['WhisperRecognitionNode', 'Pyttsx3SpeakNode', 'VOSKRecognitionNode', 'EdgeTTSSpeakNode', 'TextInputNode']
+__all__ = ['Pyttsx3SpeakNode', 'VOSKRecognitionNode', 'EdgeTTSSpeakNode', 'TextInputNode']
 
 
 class TextInputNode(BaseNode):
@@ -196,39 +195,6 @@ class VOSKRecognitionNode(BaseNode):
 
         str_ret = "".join(str_ret.split())
         return str_ret
-
-    def set_messageSignal(self, messageSignal):
-        self.messageSignal = messageSignal
-
-class WhisperRecognitionNode(BaseNode):
-    """打印节点，输出结果"""
-    __identifier__ = 'nodes.speech'
-    NODE_NAME = 'Speech recognition by whisper'
-
-    def __init__(self):
-        super(WhisperRecognitionNode, self).__init__()
-        # 初始化语音识别
-        self.recognizer = sr.Recognizer()
-        self.microphone = sr.Microphone()
-        self.add_output('text_out')
-        self.text_out = ""
-
-    def execute(self):
-        with self.microphone as source:
-            self.messageSignal.emit(f"{self.name()} 请说话...")
-            self.recognizer.adjust_for_ambient_noise(source)  # 降噪
-            audio = self.recognizer.listen(source)
-        try:
-            text = self.recognizer.recognize_whisper(audio, language='zh')  # 中文识别
-            self.messageSignal.emit(f"{self.name()} Output result: {text}")
-            self.text_out = text
-        except sr.UnknownValueError:
-            self.messageSignal.emit(f"{self.name()} Output result: 无法识别语音")
-            return ""
-        except sr.RequestError:
-            self.messageSignal.emit(f"{self.name()} Output result: 语音服务不可用")
-            return ""
-        self.messageSignal.emit(f'{self.NODE_NAME} executed.')
 
     def set_messageSignal(self, messageSignal):
         self.messageSignal = messageSignal
