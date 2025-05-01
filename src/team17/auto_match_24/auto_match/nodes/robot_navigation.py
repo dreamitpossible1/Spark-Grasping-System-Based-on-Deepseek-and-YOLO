@@ -2,13 +2,22 @@
 
 import rospy
 import actionlib
-from std_msgs.msg import String, GoalID
-from actionlib_msgs.msg import GoalStatus
+from std_msgs.msg import String
+from actionlib_msgs.msg import GoalStatus, GoalID
 from move_base_msgs.msg import MoveBaseActionResult
 from geometry_msgs.msg import Twist
-import common.msg
-import common.srv
-from common.msg import MoveStraightDistanceAction, TurnBodyDegreeAction
+import sys
+import traceback
+
+# 导入ROS消息和服务类型
+try:
+    import common.msg
+    import common.srv
+    from common.msg import MoveStraightDistanceAction, TurnBodyDegreeAction
+except ImportError as e:
+    rospy.logerr(f"导入错误: {e}")
+    rospy.logerr("这可能是因为ROS包路径未正确设置，或者消息类型未正确编译")
+    sys.exit(1)
 
 
 class RobotNavigator:
@@ -16,33 +25,81 @@ class RobotNavigator:
         """Initialize the robot navigation class with all required clients and publishers"""
         # Initialize ROS node if not already initialized
         if not rospy.core.is_initialized():
-            rospy.init_node('robot_navigator', anonymous=True)
+            try:
+                rospy.init_node('robot_navigator', anonymous=True)
+            except Exception as e:
+                rospy.logerr(f"初始化节点失败: {e}")
+                raise
 
-        # Create action client for controlling linear movement
-        self.move_action_cli = actionlib.SimpleActionClient(
-            'move_straight', MoveStraightDistanceAction)
-        self.move_action_cli.wait_for_server(
-            timeout=rospy.Duration.from_sec(3))
+        try:
+            # Create action client for controlling linear movement
+            rospy.loginfo("正在连接 move_straight ActionServer...")
+            self.move_action_cli = actionlib.SimpleActionClient(
+                'move_straight', MoveStraightDistanceAction)
+            server_exists = self.move_action_cli.wait_for_server(
+                timeout=rospy.Duration.from_sec(3))
+            
+            if not server_exists:
+                rospy.logwarn("无法连接 move_straight ActionServer，部分功能可能不可用")
+            
+            # Create action client for controlling rotation
+            rospy.loginfo("正在连接 turn_body ActionServer...")
+            self.turn_action_cli = actionlib.SimpleActionClient(
+                'turn_body', TurnBodyDegreeAction)
+            server_exists = self.turn_action_cli.wait_for_server(
+                timeout=rospy.Duration.from_sec(3))
+            
+            if not server_exists:
+                rospy.logwarn("无法连接 turn_body ActionServer，部分功能可能不可用")
+    
+            # Create publisher for direct velocity commands
+            self.cmd_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+    
+            # Create service client for distance measurements
+            rospy.loginfo("正在连接 get_distance Service...")
+            try:
+                rospy.wait_for_service('/get_distance', timeout=3.0)
+                self.distance_srv = rospy.ServiceProxy(
+                    'get_distance', common.srv.GetFrontBackDistance)
+            except (rospy.ROSException, rospy.ServiceException) as e:
+                rospy.logwarn(f"无法连接 get_distance 服务: {e}")
+                rospy.logwarn("adjust_by_tag 功能将不可用")
+    
+            # Create publisher for navigation goals
+            self.goto_local_pub = rospy.Publisher(
+                "mark_nav", String, queue_size=1)
+            
+            # 创建导航命令订阅者
+            self.navigation_sub = rospy.Subscriber(
+                "navigation_command", String, self.navigation_command_callback)
+            
+            # 是否正在导航的标志
+            self.is_navigating = False
+            
+            rospy.loginfo("Robot navigator initialized and ready")
+            
+        except Exception as e:
+            rospy.logerr(f"初始化 RobotNavigator 失败: {e}")
+            rospy.logerr(traceback.format_exc())
+            raise
 
-        # Create action client for controlling rotation
-        self.turn_action_cli = actionlib.SimpleActionClient(
-            'turn_body', TurnBodyDegreeAction)
-        self.turn_action_cli.wait_for_server(
-            timeout=rospy.Duration.from_sec(3))
-
-        # Create publisher for direct velocity commands
-        self.cmd_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-
-        # Create service client for distance measurements
-        rospy.wait_for_service('/get_distance')
-        self.distance_srv = rospy.ServiceProxy(
-            'get_distance', common.srv.GetFrontBackDistance)
-
-        # Create publisher for navigation goals
-        self.goto_local_pub = rospy.Publisher(
-            "mark_nav", String, queue_size=1)
+    def navigation_command_callback(self, msg):
+        """
+        处理导航命令
         
-        rospy.loginfo("Robot navigator initialized and ready")
+        Args:
+            msg (String): 导航命令，格式为 "goto location_name"
+        """
+        try:
+            command = msg.data.strip()
+            if command.startswith("goto "):
+                location = command[5:]  # 提取位置名称
+                rospy.loginfo(f"收到导航命令: 前往 {location}")
+                self.goto_local(location)
+            else:
+                rospy.logwarn(f"未知导航命令: {command}")
+        except Exception as e:
+            rospy.logerr(f"处理导航命令错误: {e}")
 
     def goto_local(self, name):
         """
@@ -54,32 +111,56 @@ class RobotNavigator:
         Returns:
             bool: True if successfully reached the target location, False otherwise
         """
-        # Publish target location
-        self.goto_local_pub.publish("go " + name)
-        rospy.loginfo(f"Navigating to location: {name}")
-
-        # Wait for result with 1-minute timeout
         try:
-            ret_status = rospy.wait_for_message(
-                'move_base/result', MoveBaseActionResult, rospy.Duration(60)).status.status
-        except Exception:
-            rospy.logwarn("Navigation timeout!")
-            ret_status = GoalStatus.ABORTED
-
-        # If goal not reached within timeout, cancel the goal
-        if ret_status != GoalStatus.SUCCEEDED:
-            rospy.Publisher("move_base/cancel", GoalID, queue_size=1).publish(
-                GoalID(stamp=rospy.Time.from_sec(0.0), id=""))
+            # 如果已经在导航中，则忽略此命令
+            if hasattr(self, 'is_navigating') and self.is_navigating:
+                rospy.logwarn("已有导航任务正在执行，忽略此命令")
+                return False
+                
+            if hasattr(self, 'is_navigating'):
+                self.is_navigating = True
+            
+            # Publish target location
+            self.goto_local_pub.publish(f"go {name}")
+            rospy.loginfo(f"正在导航到位置: {name}")
+    
+            # Wait for result with 1-minute timeout
             try:
-                rospy.wait_for_message(
-                    'move_base/result', MoveBaseActionResult, rospy.Duration(3))
-            except Exception:
-                rospy.logwarn("move_base result timeout. This is abnormal.")
-            rospy.loginfo("==========Timed out achieving goal==========")
+                rospy.loginfo("等待导航结果...")
+                ret_status = rospy.wait_for_message(
+                    'move_base/result', MoveBaseActionResult, rospy.Duration(60)).status.status
+            except rospy.ROSException:
+                rospy.logwarn("导航超时!")
+                ret_status = GoalStatus.ABORTED
+                if hasattr(self, 'is_navigating'):
+                    self.is_navigating = False
+                return False
+    
+            # If goal not reached within timeout, cancel the goal
+            if ret_status != GoalStatus.SUCCEEDED:
+                rospy.loginfo("目标未达成，正在取消导航目标...")
+                cancel_pub = rospy.Publisher("move_base/cancel", GoalID, queue_size=1)
+                cancel_pub.publish(GoalID(stamp=rospy.Time.from_sec(0.0), id=""))
+                try:
+                    rospy.wait_for_message(
+                        'move_base/result', MoveBaseActionResult, rospy.Duration(3))
+                except rospy.ROSException:
+                    rospy.logwarn("move_base result timeout. This is abnormal.")
+                rospy.loginfo("==========导航未能到达目标==========")
+                if hasattr(self, 'is_navigating'):
+                    self.is_navigating = False
+                return False
+            else:
+                rospy.loginfo("==========导航成功到达目标==========")
+                if hasattr(self, 'is_navigating'):
+                    self.is_navigating = False
+                return True
+        except Exception as e:
+            rospy.logerr(f"导航过程发生错误: {e}")
+            rospy.logerr(traceback.format_exc())
+            if hasattr(self, 'is_navigating'):
+                self.is_navigating = False
             return False
-        else:
-            rospy.loginfo("==========Goal succeeded==========")
-            return True
 
     def adjust_by_tag(self):
         """
@@ -187,12 +268,12 @@ if __name__ == '__main__':
         # Simple test of the navigation functionality
         navigator = RobotNavigator()
         rospy.loginfo("RobotNavigator initialized. Ready for commands.")
+        rospy.loginfo("请发布导航命令到 /navigation_command 话题，格式: 'goto 位置名'")
         
-        # Basic example usage (commented out)
-        # navigator.goto_local("sorting_area")
-        # navigator.step_go(0.3)
-        # navigator.step_rotate_pro(0.5, 1.0)
-        
+        # 等待导航命令
         rospy.spin()
     except rospy.ROSInterruptException:
-        rospy.loginfo("Navigation node terminated.") 
+        rospy.loginfo("Navigation node terminated.")
+    except Exception as e:
+        rospy.logerr(f"运行错误: {e}")
+        rospy.logerr(traceback.format_exc()) 
