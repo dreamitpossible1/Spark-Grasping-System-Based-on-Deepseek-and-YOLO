@@ -315,7 +315,7 @@ class ArmAction:
                 
                 rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+60})")
                 self.interface.set_pose(x, y, z + 60)
-                rospy.sleep(7.0)
+                rospy.sleep(10.0)
                 
                 # 下移并开启吸盘
                 rospy.loginfo("下移并开启吸盘...")
