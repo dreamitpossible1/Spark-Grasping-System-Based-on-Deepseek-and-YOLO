@@ -4,6 +4,7 @@
     <arg name="open_rviz" default="true"/>
     <arg name="lidar_type_tel" default="ydlidar_g6" doc="lidar type [3iroboticslidar2, ydlidar_g2, ydlidar_g6]"/>
     <arg name="camera_type_tel" default="astrapro" doc="camera type [astrapro, astra, d435...]"/>
+    <arg name="run_navigator" default="false" doc="Whether to run the interactive navigator node"/>
 
     <!--spark底盘驱动，机器人描述,底盘,相机-->
     <include file="$(find spark_bringup)/launch/driver_bringup.launch">
@@ -47,6 +48,8 @@
     <!-- 启动move_demo -->
     <include file="$(find move_demo)/launch/move_demo.launch" />
 
-    <!-- 启动导航测试节点 -->
-    <node pkg="auto_match" name="location_navigator" type="navigate_to_locations.py" output="screen" />
+    <!-- 可选启动导航测试节点（交互模式） -->
+    <group if="$(arg run_navigator)">
+        <node pkg="auto_match" name="location_navigator" type="navigate_to_locations.py" output="screen" args="-i"/>
+    </group>
 </launch>
