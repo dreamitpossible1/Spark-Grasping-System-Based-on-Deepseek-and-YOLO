@@ -23,7 +23,7 @@ def main():
     
     try:
         # Import the server class
-        from nodes.robot_control_server import RobotControlServer
+        from team17.auto_match_24.auto_match.nodes.robot_control_server import RobotControlServer
         
         # Create and start the server
         server = RobotControlServer(host=args.host, port=args.port)
