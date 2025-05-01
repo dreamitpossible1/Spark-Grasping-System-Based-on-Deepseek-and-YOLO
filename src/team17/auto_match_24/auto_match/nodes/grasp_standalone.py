@@ -311,7 +311,7 @@ class ArmAction:
                 # 移动到bowl上方
                 x = self.x_kb[0] * bowl[1][1] + self.x_kb[1]
                 y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
-                z = -15.0
+                z = -18.0
                 
                 rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+60})")
                 self.interface.set_pose(x, y, z + 60)
