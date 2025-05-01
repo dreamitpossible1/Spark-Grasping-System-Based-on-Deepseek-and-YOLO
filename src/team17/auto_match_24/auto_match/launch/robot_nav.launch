@@ -4,7 +4,7 @@
     <arg name="open_rviz" default="true"/>
     <arg name="lidar_type_tel" default="ydlidar_g6" doc="lidar type [3iroboticslidar2, ydlidar_g2, ydlidar_g6]"/>
     <arg name="camera_type_tel" default="astrapro" doc="camera type [astrapro, astra, d435...]"/>
-    <arg name="run_navigator" default="false" doc="Whether to run the interactive navigator node"/>
+    <arg name="run_robot_nav" default="true" doc="Whether to run the robot navigation node"/>
 
     <!--spark底盘驱动，机器人描述,底盘,相机-->
     <include file="$(find spark_bringup)/launch/driver_bringup.launch">
@@ -47,12 +47,8 @@
 
     <!-- 启动move_demo -->
     <include file="$(find move_demo)/launch/move_demo.launch" />
-
-    <!-- 复制导航脚本到正确的位置 -->
-   <exec cmd="cp $(find auto_match)/nodes/robot_navigation.py $(find auto_match)/nodes/navigate_to_locations.py /home/spark/spark_noetic_team17/Robot_manipulation/ &amp;&amp; chmod +x /home/spark/spark_noetic_team17/Robot_manipulation/robot_navigation.py /home/spark/spark_noetic_team17/Robot_manipulation/navigate_to_locations.py" />
-
-    <!-- 可选启动导航测试节点（交互模式） -->
-    <group if="$(arg run_navigator)">
-        <node pkg="auto_match" name="location_navigator" type="navigate_to_locations.py" output="screen" args="-i"/>
+    <!-- 启动机器人导航节点 -->
+    <group if="$(arg run_robot_nav)">
+        <node pkg="auto_match" name="robot_navigator" type="robot_navigation.py" output="screen"/>
     </group>
 </launch>
