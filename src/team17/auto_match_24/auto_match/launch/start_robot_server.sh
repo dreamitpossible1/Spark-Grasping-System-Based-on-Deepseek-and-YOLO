@@ -68,8 +68,11 @@ if [ -z "$ROS_DISTRO" ]; then
   fi
 fi
 
-# 获取工作空间根目录
-WORKSPACE_DIR=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+# 获取工作空间根目录 - 修正路径问题
+# 修改前: WORKSPACE_DIR=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+WORKSPACE_DIR="/home/spark/spark_noetic_team17/Robot_manipulation"
+echo "检测工作空间目录: $WORKSPACE_DIR"
+
 if [ -f "$WORKSPACE_DIR/devel/setup.bash" ]; then
   source "$WORKSPACE_DIR/devel/setup.bash"
   echo "已加载工作空间: $WORKSPACE_DIR"
@@ -78,7 +81,9 @@ else
   echo "可能会出现包查找错误。"
 fi
 
-# 启动服务器
-roslaunch auto_match robot_control_socket.launch host:="$HOST" port:="$PORT" log_output:="$LOG_OUTPUT"
+# 直接运行 Python 脚本而不是使用 roslaunch
+# 这样可以避免 ROS 参数传递问题
+echo "直接运行服务器脚本..."
+python3 "$SCRIPT_DIR/../nodes/start_robot_server.py" --host "$HOST" --port "$PORT"
 
 echo "机器人控制服务器已关闭。" 

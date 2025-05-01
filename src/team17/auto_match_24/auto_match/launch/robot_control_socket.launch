@@ -3,11 +3,19 @@
   <arg name="host" default="localhost" doc="服务器监听的主机地址"/>
   <arg name="port" default="9999" doc="服务器监听的端口号"/>
   <arg name="log_output" default="screen" doc="日志输出位置: screen 或 log"/>
+  <arg name="launch_node" default="true" doc="是否启动机器人控制服务器节点"/>
   
   <!-- 启动机器人控制服务器节点 -->
-  <node name="robot_control_server" pkg="auto_match" type="start_robot_server.py" output="$(arg log_output)" required="true">
+  <node if="$(arg launch_node)" name="robot_control_server" pkg="auto_match" type="start_robot_server.py" output="$(arg log_output)" required="true" clear_params="true">
+    <!-- 通过参数传递 -->
     <param name="host" value="$(arg host)"/>
     <param name="port" value="$(arg port)"/>
+    
+    <!-- 也尝试通过命令行参数传递 -->
+    <env name="RCS_HOST" value="$(arg host)"/>
+    <env name="RCS_PORT" value="$(arg port)"/>
+    <arg name="host_arg" value="--host $(arg host)"/>
+    <arg name="port_arg" value="--port $(arg port)"/>
   </node>
   
   <!-- 启动依赖的其他节点 (如果有的话) -->
