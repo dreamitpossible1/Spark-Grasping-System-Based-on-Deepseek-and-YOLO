@@ -352,9 +352,9 @@ class Detector:
                         continue
                     
                     # 应用置信度阈值
-                    if name == 'bowl' and results.confidence[i] < 0.2:
+                    if (name == 'bowl' or name == 'book') and results.confidence[i] < 0.2:
                         continue
-                    if name != 'bowl' and results.confidence[i] < 0.5:
+                    if name != 'bowl' and name != 'book' and results.confidence[i] < 0.5:
                         continue
                     
                     # 获取当前物体的位置和大小
@@ -365,7 +365,7 @@ class Detector:
                     confidence = results.confidence[i]
                     
                     # 特殊处理bowl物体
-                    if name == 'bowl' and should_update_bowls:
+                    if (name == 'bowl' or name == 'book') and should_update_bowls:
                         # 检查是否为新的bowl
                         is_new_bowl = True
                         found_similar_bowl = False
@@ -396,7 +396,7 @@ class Detector:
                                 self.log_info(f"检测到新的bowl: ({center_x}, {center_y})，与已有bowl都不同")
                                 self.detected_bowls.append((center_x, center_y, size_x, size_y, confidence))
                                 current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
-                    elif name == 'bowl' and not should_update_bowls:
+                    elif (name == 'bowl' or name == 'book') and not should_update_bowls:
                         # 即使不更新列表，也需要将当前检测到的bowl加入临时列表，用于显示
                         current_frame_bowls.append((center_x, center_y, size_x, size_y, confidence))
                     else:
