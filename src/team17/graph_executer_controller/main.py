@@ -1,12 +1,11 @@
-﻿
-# --------------------------------------------------------------------
+﻿# --------------------------------------------------------------------
 # -- Python Script File
 # -- Created on 12/14/2024 15:45:12
 # -- Author: xsf
 # -- Comment: .
 # --------------------------------------------------------------------
 import sys, os, time, threading
-from src.mainwindow import MainWindow
+from src.team17.graph_executer_controller.src.mainwindow import MainWindow
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtWidgets import QApplication, QStyleFactory
 from PySide6.QtGui import QFont, QPalette, QColor
