@@ -101,12 +101,16 @@ class CamAction:
             center_y = obj.bbox.center.y
             score = obj.results[0].score
             rospy.loginfo(f"检测到物体 #{i+1}: ID={obj_id}, 位置=({center_x}, {center_y}), 置信度={score}")
-            obj_dist[obj_id] = [center_x, center_y]
-
-        # 筛选出需要的物品 cube_list中的key代表识别物体的ID，value代表位置信息
-        for key, value in obj_dist.items():
-            cube_list.append([key, value])
-            rospy.loginfo(f"添加到目标列表: ID={key}, 位置=({value[0]}, {value[1]})")
+            
+            # 修改此处，将每个检测到的物体直接添加到cube_list中
+            # 而不是使用obj_dist字典（这样会导致相同ID的物体被覆盖）
+            cube_list.append([obj_id, [center_x, center_y]])
+            rospy.loginfo(f"直接添加到目标列表: ID={obj_id}, 位置=({center_x}, {center_y})")
+            
+        # 不再需要这个循环，因为我们已经在上面直接添加了
+        # for key, value in obj_dist.items():
+        #    cube_list.append([key, value])
+        #    rospy.loginfo(f"添加到目标列表: ID={key}, 位置=({value[0]}, {value[1]})")
 
         rospy.loginfo(f"detector()返回结果: 找到 {len(cube_list)} 个目标物体")
         return cube_list
@@ -232,6 +236,18 @@ class ArmAction:
             rospy.logwarn("未检测到任何物体，退出抓取流程")
             return 0
         
+        # 筛选出所有bowl (ID=45)物体
+        bowl_list = [item for item in cube_list_tmp if item[0] == 45]
+        rospy.loginfo(f"筛选得到 {len(bowl_list)} 个bowl物体")
+        
+        # 如果没有bowl，则使用原始列表
+        if len(bowl_list) == 0:
+            rospy.logwarn("未检测到bowl物体，使用原始物体列表")
+        else:
+            # 如果有bowl，则只使用bowl列表
+            cube_list_tmp = bowl_list
+            rospy.loginfo("使用筛选后的bowl列表继续处理")
+        
         rospy.loginfo("开始筛选排除区域外的物体...")
         for pice in cube_list_tmp:
             xp = pice[1][0]
@@ -255,8 +271,12 @@ class ArmAction:
         # 根据y坐标对物体列表进行排序（从远到近）
         cube_list.sort(key=lambda x: x[1][1])
         
+        # 检查是否所有物体都是bowl (ID=45)
+        all_bowls = all(item[0] == 45 for item in cube_list)
+        rospy.loginfo(f"是否所有物体都是bowl: {all_bowls}")
+        
         # 处理三个bowl的情况
-        if len(cube_list) == 3:
+        if len(cube_list) == 3 and all_bowls:
             rospy.loginfo("检测到3个bowl，开始执行堆叠流程")
             # 最近的bowl作为放置点
             target_bowl = cube_list[-1]
@@ -270,7 +290,7 @@ class ArmAction:
                 y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
                 z = -10.0
                 
-                rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方...")
+                rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+40})")
                 self.interface.set_pose(x, y, z + 40)
                 rospy.sleep(2.0)
                 
@@ -287,7 +307,7 @@ class ArmAction:
                 rospy.sleep(2.0)
                 
                 # 移动到放置点上方
-                rospy.loginfo("移动到放置点上方...")
+                rospy.loginfo(f"移动到放置点上方... 坐标: ({target_x}, {target_y}, {z+120})")
                 self.interface.set_pose(target_x, target_y, z + 120)
                 rospy.sleep(2.0)
                 
