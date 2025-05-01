@@ -9,9 +9,9 @@ import sys
 import argparse
 import rospy
 
-# Add the parent directory to the Python path
+# 添加当前目录到 Python 路径，确保能找到 robot_control_server.py
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
+sys.path.insert(0, current_dir)
 
 def main():
     """Main function to parse arguments and start the server"""
@@ -32,7 +32,12 @@ def main():
     
     try:
         # 导入服务器类
-        from robot_control_server import RobotControlServer
+        try:
+            from robot_control_server import RobotControlServer
+        except ImportError:
+            rospy.logerr("无法导入 robot_control_server.py，尝试使用绝对导入")
+            # 尝试绝对导入
+            from team17.auto_match_24.auto_match.nodes.robot_control_server import RobotControlServer
         
         # 创建并启动服务器
         server = RobotControlServer(host=host, port=port)
