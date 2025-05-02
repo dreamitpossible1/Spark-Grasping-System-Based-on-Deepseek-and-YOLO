@@ -167,25 +167,57 @@ class VOSKRecognitionNode(BaseNode):
             num_devices = info.get('deviceCount')
             self.messageSignal.emit(f"调试: 检测到 {num_devices} 个音频设备")
             
+            # 收集所有输入设备信息
+            input_devices = []
             for i in range(num_devices):
                 device_info = audio.get_device_info_by_index(i)
                 if device_info.get('maxInputChannels') > 0:
                     self.messageSignal.emit(f"调试: 输入设备 {i}: {device_info.get('name')}")
+                    input_devices.append((i, device_info.get('name')))
             
-            # 使用默认设备或第一个可用的输入设备
+            # 明确选择HDA Intel PCH设备而非ASTRA Pro
             input_device_index = None
-            for i in range(num_devices):
-                device_info = audio.get_device_info_by_index(i)
-                if device_info.get('maxInputChannels') > 0:
-                    input_device_index = i
-                    self.messageSignal.emit(f"调试: 将使用输入设备: {device_info.get('name')}")
+            preferred_device_names = ["HDA Intel PCH", "PCH", "pulse", "default"]
+            
+            # 首先尝试从优先设备列表中找到匹配项
+            for preferred_name in preferred_device_names:
+                for idx, name in input_devices:
+                    if preferred_name in name and "ASTRA" not in name:
+                        input_device_index = idx
+                        self.messageSignal.emit(f"调试: 选择首选设备: {name}")
+                        break
+                if input_device_index is not None:
                     break
+            
+            # 如果没有找到首选设备，尝试任何非ASTRA设备
+            if input_device_index is None:
+                for idx, name in input_devices:
+                    if "ASTRA" not in name:
+                        input_device_index = idx
+                        self.messageSignal.emit(f"调试: 未找到首选设备，使用: {name}")
+                        break
+            
+            # 如果还是没有找到，则使用默认设备
+            if input_device_index is None:
+                input_device_index = audio.get_default_input_device_info()['index']
+                self.messageSignal.emit(f"调试: 使用默认输入设备")
+            
+            # 获取选定设备的能力，检查采样率是否支持
+            device_info = audio.get_device_info_by_index(input_device_index)
+            sample_rate = int(device_info.get('defaultSampleRate'))
+            
+            # 如果设备不支持44100Hz采样率，使用设备的默认采样率
+            if sample_rate != RATE:
+                self.messageSignal.emit(f"调试: 设备默认采样率为 {sample_rate}Hz，将使用此采样率")
+                RATE = sample_rate
+            
+            self.messageSignal.emit(f"调试: 将使用输入设备: {device_info.get('name')} (采样率: {RATE}Hz)")
             
             stream = audio.open(format=FORMAT,
                                 channels=1,
                                 rate=RATE,
                                 input=True,
-                                input_device_index=input_device_index,  # 明确指定输入设备
+                                input_device_index=input_device_index,
                                 frames_per_buffer=CHUNK)
                                 
             self.messageSignal.emit(f"调试: 音频流打开成功")
