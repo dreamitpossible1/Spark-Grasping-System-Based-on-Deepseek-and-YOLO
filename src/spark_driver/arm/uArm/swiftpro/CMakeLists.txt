@@ -149,7 +149,10 @@ add_executable(swiftpro_write_node src/swiftpro_write_node.cpp)
 add_executable(swiftpro_moveit_node src/swiftpro_moveit_node.cpp)
 add_executable(swiftpro_rviz_node src/swiftpro_rviz_node.cpp)
 add_executable(swiftpro_read_node src/swiftpro_read_node.cpp)
+<<<<<<< Updated upstream
 add_executable(swiftpro_unified_node src/swiftpro_unified_node.cpp)
+=======
+>>>>>>> Stashed changes
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -168,7 +171,10 @@ add_dependencies(swiftpro_write_node swiftpro_generate_messages_cpp)
 add_dependencies(swiftpro_moveit_node swiftpro_generate_messages_cpp)
 add_dependencies(swiftpro_rviz_node swiftpro_generate_messages_cpp)
 add_dependencies(swiftpro_read_node swiftpro_generate_messages_cpp)
+<<<<<<< Updated upstream
 add_dependencies(swiftpro_unified_node swiftpro_generate_messages_cpp)
+=======
+>>>>>>> Stashed changes
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
@@ -178,7 +184,10 @@ target_link_libraries(swiftpro_write_node ${catkin_LIBRARIES})
 target_link_libraries(swiftpro_moveit_node ${catkin_LIBRARIES})
 target_link_libraries(swiftpro_rviz_node ${catkin_LIBRARIES})
 target_link_libraries(swiftpro_read_node ${catkin_LIBRARIES})
+<<<<<<< Updated upstream
 target_link_libraries(swiftpro_unified_node ${catkin_LIBRARIES})
+=======
+>>>>>>> Stashed changes
 
 #############
 ## Install ##
