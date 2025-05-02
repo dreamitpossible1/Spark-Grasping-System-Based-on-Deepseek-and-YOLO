@@ -111,30 +111,67 @@ class RobotControlServer:
             pos_msg.y = float(command_data['position.y'])
             pos_msg.z = float(command_data['position.z'])
             pos_msg.speed = 1000  # Default speed
+
+            rospy.loginfo(f"Preparing to move robot to position: x={pos_msg.x}, y={pos_msg.y}, z={pos_msg.z}")
+            
+            # Store position values for response
+            position_values = {
+                "position.x": pos_msg.x,
+                "position.y": pos_msg.y,
+                "position.z": pos_msg.z
+            }
             
             # Extract pump state (if provided)
+            pump_state = None
             if 'pump_value' in command_data or 'pump_state' in command_data:
                 pump_msg = status()
                 
                 # Check pump_value first (direct numeric value)
                 if 'pump_value' in command_data:
                     pump_msg.status = int(command_data['pump_value'])
+                    pump_state = "on" if pump_msg.status == 1 else "off"
                 # Fall back to pump_state (string "on"/"off")
                 elif 'pump_state' in command_data:
-                    pump_msg.status = 1 if command_data['pump_state'].lower() == 'on' else 0
+                    pump_state = command_data['pump_state'].lower()
+                    pump_msg.status = 1 if pump_state == 'on' else 0
                 
                 # Send pump command
                 self.pub_pump.publish(pump_msg)
-                rospy.loginfo(f"Pump command sent: {'on' if pump_msg.status == 1 else 'off'}")
+                rospy.loginfo(f"Pump command sent: {pump_state}")
             
             # Send position command
+            rospy.loginfo(f"Publishing position command to topic: position_write_topic")
             self.pub_position.publish(pos_msg)
             
-            # Wait for execution
-            rospy.sleep(3.0)
+            # Wait for execution (with timeout)
+            wait_time = 3.0
+            rospy.loginfo(f"Waiting {wait_time} seconds for robot movement to complete...")
+            rospy.sleep(wait_time)
+            
+            # Try to get final position after movement
+            final_pose = self.get_end_pose()
+            if final_pose:
+                rospy.loginfo(f"Final robot position after movement: x={final_pose[0]}, y={final_pose[1]}, z={final_pose[2]}")
+                position_values = {
+                    "position.x": final_pose[0],
+                    "position.y": final_pose[1],
+                    "position.z": final_pose[2]
+                }
             
             rospy.loginfo(f"Command executed: position [{pos_msg.x}, {pos_msg.y}, {pos_msg.z}]")
-            return {"status": "success", "message": "Command executed successfully"}
+            
+            # Create response with position data and pump state if available
+            response = {
+                "status": "success",
+                "message": "Command executed successfully",
+                **position_values  # Include position values in response
+            }
+            
+            # Add pump state to response if it was included in the command
+            if pump_state:
+                response["pump_state"] = pump_state
+            
+            return response
             
         except Exception as e:
             rospy.logerr(f"Error executing command: {str(e)}")
@@ -157,10 +194,13 @@ class RobotControlServer:
                 
                 # Process request based on command type
                 if request["command"] == "get_robot_state":
+                    rospy.loginfo(f"Received get_robot_state request")
                     end_pose = self.get_end_pose()
                     pump_state = self.get_pump_state()
+                    joint_states = self.get_joint_states()
                     
                     if end_pose:
+                        rospy.loginfo(f"Retrieved end pose: {end_pose}")
                         response = {
                             "status": "success",
                             "position.x": end_pose[0],
@@ -172,13 +212,26 @@ class RobotControlServer:
                             "orientation.w": end_pose[6],
                             "pump_state": pump_state
                         }
+                        
+                        # Add joint states if available
+                        if joint_states:
+                            rospy.loginfo(f"Retrieved joint states: names={joint_states.name}, positions={joint_states.position}")
+                            joint_names = joint_states.name
+                            joint_positions = joint_states.position
+                            
+                            # Add joint positions to response
+                            for i, name in enumerate(joint_names):
+                                if i < len(joint_positions):
+                                    response[f"joint.{name}"] = joint_positions[i]
                     else:
                         response = {"status": "error", "message": "Failed to get robot state"}
                 
                 elif request["command"] == "execute_command":
+                    rospy.loginfo(f"Received execute_command request: {request['data']}")
                     response = self.execute_robot_command(request["data"])
                 
                 # Send response back to client
+                rospy.loginfo(f"Sending response: {json.dumps(response)}")
                 client_socket.sendall(json.dumps(response).encode('utf-8'))
                 
             except json.JSONDecodeError:
@@ -264,6 +317,22 @@ class RobotControlServer:
             self.is_node_created = False
         
         rospy.loginfo("Server stopped")
+
+    def get_joint_states(self):
+        """Get the current joint states"""
+        # Wait for joint states data
+        timeout_counter = 0
+        while not self.is_get_joint_states and timeout_counter < 50:
+            rospy.sleep(0.1)
+            timeout_counter += 1
+        
+        if not self.is_get_joint_states:
+            rospy.logwarn("Failed to get joint states (timeout)")
+            return None
+        
+        joint_states = self.joint_states
+        self.is_get_joint_states = False
+        return joint_states
 
 if __name__ == "__main__":
     try:
