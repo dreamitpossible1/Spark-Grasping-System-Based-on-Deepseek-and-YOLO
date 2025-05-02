@@ -146,10 +146,10 @@ class VOSKRecognitionNode(BaseNode):
         self.messageSignal.emit(f'{self.NODE_NAME} executed.')
 
     def save_wave(self, model):
-        # 设置音频参数
+        # 修改音频参数，参考spark_voice/scripts/lib/microphone.py的配置
         FORMAT = pyaudio.paInt16  # 音频流的格式
-        RATE = 44100  # 采样率，单位Hz
-        CHUNK = 4000  # 单位帧
+        RATE = 16000  # 采样率调整为16000Hz，与Microphone类一致
+        CHUNK = 512  # 单位帧，与Microphone类一致
         THRESHOLDNUM = 30  # 静默时间，超过这个个数就保存文件
         THRESHOLD = 7000  # 提高停止采集阈值，适应嘈杂环境 (原先是50)
         MAX_RECORDING_TIME = 10  # 最长录音时间（秒）
@@ -171,56 +171,80 @@ class VOSKRecognitionNode(BaseNode):
             
             # 收集所有输入设备信息
             input_devices = []
+            respeaker_index = None  # 优先查找ReSpeaker设备
+            
             for i in range(num_devices):
                 device_info = audio.get_device_info_by_index(i)
                 if device_info.get('maxInputChannels') > 0:
-                    self.messageSignal.emit(f"调试: 输入设备 {i}: {device_info.get('name')}")
-                    input_devices.append((i, device_info.get('name')))
+                    device_name = device_info.get('name')
+                    self.messageSignal.emit(f"调试: 输入设备 {i}: {device_name}")
+                    input_devices.append((i, device_name))
+                    
+                    # 检查是否为ReSpeaker设备（参考Microphone类的逻辑）
+                    if 'respeaker' in device_name.lower() and device_info.get('maxInputChannels') > 0:
+                        self.messageSignal.emit(f"调试: 发现ReSpeaker设备: {device_name}")
+                        respeaker_index = i
             
-            # 明确选择HDA Intel PCH设备而非ASTRA Pro
+            # 设备选择优先级：ReSpeaker > 明确指定的设备 > 非ASTRA设备 > 默认设备
             input_device_index = None
-            preferred_device_names = ["HDA Intel PCH", "PCH", "pulse", "default"]
             
-            # 首先尝试从优先设备列表中找到匹配项
-            for preferred_name in preferred_device_names:
-                for idx, name in input_devices:
-                    if preferred_name in name and "ASTRA" not in name:
-                        input_device_index = idx
-                        self.messageSignal.emit(f"调试: 选择首选设备: {name}")
+            # 1. 优先使用ReSpeaker设备
+            if respeaker_index is not None:
+                input_device_index = respeaker_index
+                self.messageSignal.emit(f"调试: 将使用ReSpeaker设备 (index: {respeaker_index})")
+                
+            # 2. 其次使用首选设备列表中的设备
+            if input_device_index is None:
+                preferred_device_names = ["pulse", "default", "HDA Intel PCH", "PCH"]
+                for preferred_name in preferred_device_names:
+                    for idx, name in input_devices:
+                        # 排除ASTRA设备，因为它是机械臂而非麦克风
+                        if preferred_name in name and "ASTRA" not in name:
+                            input_device_index = idx
+                            self.messageSignal.emit(f"调试: 选择首选设备: {name}")
+                            break
+                    if input_device_index is not None:
                         break
-                if input_device_index is not None:
-                    break
             
-            # 如果没有找到首选设备，尝试任何非ASTRA设备
+            # 3. 如果没有找到首选设备，尝试任何非ASTRA设备
             if input_device_index is None:
                 for idx, name in input_devices:
                     if "ASTRA" not in name:
                         input_device_index = idx
-                        self.messageSignal.emit(f"调试: 未找到首选设备，使用: {name}")
+                        self.messageSignal.emit(f"调试: 未找到首选设备，使用非ASTRA设备: {name}")
                         break
             
-            # 如果还是没有找到，则使用默认设备
+            # 4. 如果还是没有找到，则使用默认设备
             if input_device_index is None:
                 input_device_index = audio.get_default_input_device_info()['index']
                 self.messageSignal.emit(f"调试: 使用默认输入设备")
             
-            # 获取选定设备的能力，检查采样率是否支持
+            # 获取选定设备的能力
             device_info = audio.get_device_info_by_index(input_device_index)
-            sample_rate = int(device_info.get('defaultSampleRate'))
+            device_name = device_info.get('name')
             
-            # 如果设备不支持44100Hz采样率，使用设备的默认采样率
-            if sample_rate != RATE:
-                self.messageSignal.emit(f"调试: 设备默认采样率为 {sample_rate}Hz，将使用此采样率")
-                RATE = sample_rate
+            # 根据设备调整采样率
+            if 'respeaker' in device_name.lower():
+                # ReSpeaker通常使用16000Hz
+                RATE = 16000
+            else:
+                # 其他设备使用其默认采样率
+                sample_rate = int(device_info.get('defaultSampleRate'))
+                if sample_rate != RATE:
+                    self.messageSignal.emit(f"调试: 设备默认采样率为 {sample_rate}Hz，将使用此采样率")
+                    RATE = sample_rate
             
-            self.messageSignal.emit(f"调试: 将使用输入设备: {device_info.get('name')} (采样率: {RATE}Hz)")
+            self.messageSignal.emit(f"调试: 将使用输入设备: {device_name} (采样率: {RATE}Hz)")
             
-            stream = audio.open(format=FORMAT,
-                                channels=1,
-                                rate=RATE,
-                                input=True,
-                                input_device_index=input_device_index,
-                                frames_per_buffer=CHUNK)
+            # 打开音频流
+            stream = audio.open(
+                format=FORMAT,
+                channels=1,
+                rate=RATE,
+                input=True,
+                input_device_index=input_device_index,
+                frames_per_buffer=CHUNK
+            )
                                 
             self.messageSignal.emit(f"调试: 音频流打开成功")
         except Exception as e:
@@ -253,7 +277,7 @@ class VOSKRecognitionNode(BaseNode):
                     frame_energy = np.mean(np.abs(np_data))
                     
                     frame_count += 1
-                    if frame_count % 10 == 0:  # 每10帧打印一次，避免打印太多
+                    if frame_count % 20 == 0:  # 由于帧大小减小，调整打印频率
                         elapsed_time = time.time() - start_time
                         self.messageSignal.emit(f"调试: 帧 {frame_count}, 能量 {frame_energy:.2f}, 静默计数 {count}/{THRESHOLDNUM}, 已录音 {elapsed_time:.1f}秒")
                     
@@ -304,21 +328,28 @@ class VOSKRecognitionNode(BaseNode):
         rec = KaldiRecognizer(model, RATE)
         rec.SetWords(True)
         str_ret = ""
-        for data in frames:
-            if rec.AcceptWaveform(data):
+        
+        # 分批处理音频数据以提高识别效果
+        buffer_size = 50  # 每批处理的帧数
+        for i in range(0, len(frames), buffer_size):
+            chunk = b''.join(frames[i:i+buffer_size])
+            if rec.AcceptWaveform(chunk):
                 result = json.loads(rec.Result())
-                if 'text' in result:
-                    str_ret += result['text']
+                if 'text' in result and result['text']:
+                    str_ret += result['text'] + " "
                     self.messageSignal.emit(f"调试: 部分识别结果: {result['text']}")
 
+        # 处理最终结果
         result = json.loads(rec.FinalResult())
-        if 'text' in result:
+        if 'text' in result and result['text']:
             str_ret += result['text']
             self.messageSignal.emit(f"调试: 最终识别结果: {result['text']}")
-        else:
+        
+        if not str_ret.strip():
             self.messageSignal.emit(f"警告: 未能识别出任何文本")
-
-        str_ret = "".join(str_ret.split())
+            
+        # 清理结果字符串
+        str_ret = " ".join(str_ret.split())
         return str_ret
 
     def set_messageSignal(self, messageSignal):
