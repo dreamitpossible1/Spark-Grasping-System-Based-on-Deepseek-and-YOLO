@@ -1,13 +1,21 @@
 #! /usr/bin/python3
 # -*- coding: utf-8 -*-
 from pathlib import Path
-from Qt import QtCore
+from Qt import QtCore, QtWidgets
 import os
 from NodeGraphQt import (
     NodeGraph,
     PropertiesBinWidget
 )
 from threading import Thread
+import importlib.util
+
+# Check if our custom search module exists
+try:
+    from src.team17.graph_executer_controller.src.GraphFlow.custom_node_search import CustomNodeSearchWidget
+    CUSTOM_SEARCH_AVAILABLE = True
+except ImportError:
+    CUSTOM_SEARCH_AVAILABLE = False
 
 # import example nodes from the "nodes" sub-package
 from src.team17.graph_executer_controller.nodes import *
@@ -23,6 +31,11 @@ class GraphFlow:
         self.graph = NodeGraph()
         self.graph_widget = self.graph.widget
         self.messageSignal = messageSignal
+        
+        # Add our custom toggle_node_search method to the graph
+        if CUSTOM_SEARCH_AVAILABLE:
+            self.original_toggle_node_search = self.graph.toggle_node_search
+            self.graph.toggle_node_search = self.custom_toggle_node_search
 
         # set up context menu for the node graph.
         hotkey_path = os.path.join(BASE_PATH, 'hotkeys', 'hotkeys.json')
@@ -220,3 +233,26 @@ class GraphFlow:
         if file_path:
             save_session(file_path)
 
+    def custom_toggle_node_search(self):
+        """
+        Custom implementation of node search that uses our more robust dialog.
+        """
+        try:
+            # Try to use our custom node search
+            if CUSTOM_SEARCH_AVAILABLE:
+                # Get cursor position for dialog placement
+                cursor_pos = QtCore.QCursor.pos()
+                
+                # Create and show dialog
+                CustomNodeSearchWidget.create_and_show(self.graph, cursor_pos)
+                return
+        except Exception as e:
+            # Fall back to original implementation if our custom one fails
+            self.messageSignal.emit(f"Custom node search failed: {str(e)}")
+            
+        # Fall back to original implementation
+        try:
+            self.original_toggle_node_search()
+        except Exception as e:
+            self.messageSignal.emit(f"Original node search also failed: {str(e)}")
+            
