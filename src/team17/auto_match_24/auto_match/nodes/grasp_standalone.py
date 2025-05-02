@@ -311,7 +311,7 @@ class ArmAction:
                 # 移动到bowl上方
                 x = self.x_kb[0] * bowl[1][1] + self.x_kb[1]
                 y = self.y_kb[0] * bowl[1][0] + self.y_kb[1]
-                z = -18.0
+                z = -21.0
                 
                 rospy.loginfo(f"移动到bowl (ID={bowl[0]}) 上方... 坐标: ({x}, {y}, {z+60})")
                 self.interface.set_pose(x, y, z + 60)
@@ -320,7 +320,7 @@ class ArmAction:
                 # 下移并开启吸盘
                 rospy.loginfo("下移并开启吸盘...")
                 self.interface.set_pose(x, y, z)
-                rospy.sleep(5.0)
+                rospy.sleep(6.0)
                 self.interface.set_pump(True)
                 rospy.sleep(2.5)
                 
