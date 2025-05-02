@@ -12,6 +12,7 @@ import edge_tts
 import asyncio
 import tempfile
 from playsound import playsound
+import time
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 __all__ = ['Pyttsx3SpeakNode', 'VOSKRecognitionNode', 'EdgeTTSSpeakNode', 'TextInputNode']
@@ -150,8 +151,9 @@ class VOSKRecognitionNode(BaseNode):
         RATE = 44100  # 采样率，单位Hz
         CHUNK = 4000  # 单位帧
         THRESHOLDNUM = 30  # 静默时间，超过这个个数就保存文件
-        THRESHOLD = 50  # 设定停止采集阈值
-
+        THRESHOLD = 7000  # 提高停止采集阈值，适应嘈杂环境 (原先是50)
+        MAX_RECORDING_TIME = 10  # 最长录音时间（秒）
+        
         # 尝试禁止ALSA错误消息显示
         # 重定向stderr到/dev/null来抑制ALSA错误消息
         old_stderr = os.dup(2)
@@ -236,11 +238,15 @@ class VOSKRecognitionNode(BaseNode):
         # print("开始录音...")
         self.messageSignal.emit(f"{self.name()} 开始录音...")
         self.messageSignal.emit(f"调试信息: 阈值设置为 {THRESHOLD}，需要 {THRESHOLDNUM} 帧低于阈值才会停止录音")
+        self.messageSignal.emit(f"调试信息: 最长录音时间为 {MAX_RECORDING_TIME} 秒")
         
         count = 0
         frame_count = 0
+        start_time = time.time()
+        
         try:
-            while count < THRESHOLDNUM:
+            # 添加时间限制条件
+            while count < THRESHOLDNUM and (time.time() - start_time) < MAX_RECORDING_TIME:
                 try:
                     data = stream.read(CHUNK, exception_on_overflow=False)
                     np_data = np.frombuffer(data, dtype=np.int16)
@@ -248,7 +254,8 @@ class VOSKRecognitionNode(BaseNode):
                     
                     frame_count += 1
                     if frame_count % 10 == 0:  # 每10帧打印一次，避免打印太多
-                        self.messageSignal.emit(f"调试: 帧 {frame_count}, 能量 {frame_energy:.2f}, 静默计数 {count}/{THRESHOLDNUM}")
+                        elapsed_time = time.time() - start_time
+                        self.messageSignal.emit(f"调试: 帧 {frame_count}, 能量 {frame_energy:.2f}, 静默计数 {count}/{THRESHOLDNUM}, 已录音 {elapsed_time:.1f}秒")
                     
                     # 如果能量低于阈值持续时间过长，则停止录音
                     if frame_energy < THRESHOLD:
@@ -265,6 +272,13 @@ class VOSKRecognitionNode(BaseNode):
                     self.messageSignal.emit(f"警告: 录音过程中发生IO错误: {str(e)}")
                     # 尝试继续录音
                     continue
+                    
+            # 录音结束原因
+            if time.time() - start_time >= MAX_RECORDING_TIME:
+                self.messageSignal.emit(f"调试: 达到最大录音时间限制 {MAX_RECORDING_TIME} 秒，停止录音")
+            else:
+                self.messageSignal.emit(f"调试: 检测到足够的静默，停止录音")
+                
         except Exception as e:
             self.messageSignal.emit(f"错误: 录音过程中发生异常: {str(e)}")
             # 清理资源
@@ -275,7 +289,7 @@ class VOSKRecognitionNode(BaseNode):
             
         # print("停止录音!")
         self.messageSignal.emit(f"{self.name()} 停止录音!")
-        self.messageSignal.emit(f"调试: 总共录制了 {frame_count} 帧音频")
+        self.messageSignal.emit(f"调试: 总共录制了 {frame_count} 帧音频，时长约 {(time.time() - start_time):.2f} 秒")
         stream.stop_stream()
         stream.close()
         audio.terminate()
