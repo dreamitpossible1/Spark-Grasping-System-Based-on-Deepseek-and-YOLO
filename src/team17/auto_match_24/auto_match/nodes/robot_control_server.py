@@ -112,7 +112,7 @@ class RobotControlServer:
             pos_msg.z = float(command_data['position.z'])
             pos_msg.speed = 1000  # Default speed
 
-            rospy.loginfo(f"Preparing to move robot to position: x={pos_msg.x}, y={pos_msg.y}, z={pos_msg.z}")
+            rospy.loginfo(f"Preparing to move robot to position: x={pos_msg.x}, y={pos_msg.y}, z={pos_msg.z}, speed={pos_msg.speed}")
             
             # Store position values for response
             position_values = {
@@ -139,9 +139,22 @@ class RobotControlServer:
                 self.pub_pump.publish(pump_msg)
                 rospy.loginfo(f"Pump command sent: {pump_state}")
             
+            # Debug output of message before publishing
+            rospy.loginfo(f"Position message details - Type: {type(pos_msg).__name__}, Fields: x={pos_msg.x}, y={pos_msg.y}, z={pos_msg.z}, speed={pos_msg.speed}")
+            
             # Send position command
             rospy.loginfo(f"Publishing position command to topic: position_write_topic")
-            self.pub_position.publish(pos_msg)
+            try:
+                # Try publishing the message and log the result
+                self.pub_position.publish(pos_msg)
+                rospy.loginfo("Position message published successfully")
+                
+                # For debugging, also try publishing using the raw rostopic command format
+                debug_cmd = f"rostopic pub -1 /position_write_topic swiftpro/position \"x: {pos_msg.x}\ny: {pos_msg.y}\nz: {pos_msg.z}\nspeed: {pos_msg.speed}\" &"
+                rospy.loginfo(f"Equivalent rostopic command would be: {debug_cmd}")
+                
+            except Exception as pub_err:
+                rospy.logerr(f"Error publishing position message: {str(pub_err)}")
             
             # Wait for execution (with timeout)
             wait_time = 3.0
