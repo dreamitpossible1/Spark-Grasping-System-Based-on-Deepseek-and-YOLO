@@ -120,13 +120,13 @@ class VOSKRecognitionNode(BaseNode):
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
 
-        model_dir = os.path.join(BASE_DIR, 'res', 'models', 'VOSK', 'vosk-model-cn-0.15')
+        model_dir = os.path.join(BASE_DIR, 'res', 'models', 'VOSK', 'vosk-model-small-cn-0.22')
         if os.path.exists(model_dir):
             self.vosk_model = Model(model_dir)
         else:
-            download_and_extract_zip('https://alphacephei.com/vosk/models/vosk-model-cn-0.15.zip',os.path.dirname(model_dir), os.path.dirname(model_dir))
+            download_and_extract_zip('https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip',os.path.dirname(model_dir), os.path.dirname(model_dir))
             try:
-                os.remove(os.path.join(os.path.dirname(model_dir), 'vosk-model-cn-0.15.zip'))
+                os.remove(os.path.join(os.path.dirname(model_dir), 'vosk-model-small-cn-0.22'))
             except OSError:
                 pass
             self.vosk_model = Model(model_dir)
