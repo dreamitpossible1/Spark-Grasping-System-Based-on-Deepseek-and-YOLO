@@ -152,34 +152,109 @@ class VOSKRecognitionNode(BaseNode):
         THRESHOLDNUM = 30  # 静默时间，超过这个个数就保存文件
         THRESHOLD = 50  # 设定停止采集阈值
 
-        audio = pyaudio.PyAudio()
-        stream = audio.open(format=FORMAT,
-                            channels=1,
-                            rate=RATE,
-                            input=True,
-                            frames_per_buffer=CHUNK)
+        # 尝试禁止ALSA错误消息显示
+        # 重定向stderr到/dev/null来抑制ALSA错误消息
+        old_stderr = os.dup(2)
+        os.close(2)
+        os.open(os.devnull, os.O_WRONLY)
+        
+        try:
+            audio = pyaudio.PyAudio()
+            self.messageSignal.emit(f"调试: PyAudio初始化成功")
+            
+            # 打印可用的输入设备信息
+            info = audio.get_host_api_info_by_index(0)
+            num_devices = info.get('deviceCount')
+            self.messageSignal.emit(f"调试: 检测到 {num_devices} 个音频设备")
+            
+            for i in range(num_devices):
+                device_info = audio.get_device_info_by_index(i)
+                if device_info.get('maxInputChannels') > 0:
+                    self.messageSignal.emit(f"调试: 输入设备 {i}: {device_info.get('name')}")
+            
+            # 使用默认设备或第一个可用的输入设备
+            input_device_index = None
+            for i in range(num_devices):
+                device_info = audio.get_device_info_by_index(i)
+                if device_info.get('maxInputChannels') > 0:
+                    input_device_index = i
+                    self.messageSignal.emit(f"调试: 将使用输入设备: {device_info.get('name')}")
+                    break
+            
+            stream = audio.open(format=FORMAT,
+                                channels=1,
+                                rate=RATE,
+                                input=True,
+                                input_device_index=input_device_index,  # 明确指定输入设备
+                                frames_per_buffer=CHUNK)
+                                
+            self.messageSignal.emit(f"调试: 音频流打开成功")
+        except Exception as e:
+            # 恢复stderr
+            os.dup2(old_stderr, 2)
+            os.close(old_stderr)
+            self.messageSignal.emit(f"错误: 无法初始化录音设备: {str(e)}")
+            return ""
+            
+        # 恢复stderr
+        os.dup2(old_stderr, 2)
+        os.close(old_stderr)
+        
         frames = []
         # print("开始录音...")
         self.messageSignal.emit(f"{self.name()} 开始录音...")
+        self.messageSignal.emit(f"调试信息: 阈值设置为 {THRESHOLD}，需要 {THRESHOLDNUM} 帧低于阈值才会停止录音")
+        
         count = 0
-        while count < THRESHOLDNUM:
-            data = stream.read(CHUNK, exception_on_overflow=False)
-            np_data = np.frombuffer(data, dtype=np.int16)
-            frame_energy = np.mean(np.abs(np_data))
-            # print(frame_energy)
-            # 如果能量低于阈值持续时间过长，则停止录音
-            if frame_energy < THRESHOLD:
-                count += 1
-            elif count > 0:
-                count -= 1
+        frame_count = 0
+        try:
+            while count < THRESHOLDNUM:
+                try:
+                    data = stream.read(CHUNK, exception_on_overflow=False)
+                    np_data = np.frombuffer(data, dtype=np.int16)
+                    frame_energy = np.mean(np.abs(np_data))
+                    
+                    frame_count += 1
+                    if frame_count % 10 == 0:  # 每10帧打印一次，避免打印太多
+                        self.messageSignal.emit(f"调试: 帧 {frame_count}, 能量 {frame_energy:.2f}, 静默计数 {count}/{THRESHOLDNUM}")
+                    
+                    # 如果能量低于阈值持续时间过长，则停止录音
+                    if frame_energy < THRESHOLD:
+                        count += 1
+                        if count % 5 == 0:  # 每累积5个静默帧打印一次
+                            self.messageSignal.emit(f"调试: 检测到静默 {count}/{THRESHOLDNUM}")
+                    elif count > 0:
+                        if count > 10:  # 如果有明显的计数减少，打印提示
+                            self.messageSignal.emit(f"调试: 检测到声音，静默计数重置从 {count} ")
+                        count -= 1
 
-            frames.append(data)
+                    frames.append(data)
+                except IOError as e:
+                    self.messageSignal.emit(f"警告: 录音过程中发生IO错误: {str(e)}")
+                    # 尝试继续录音
+                    continue
+        except Exception as e:
+            self.messageSignal.emit(f"错误: 录音过程中发生异常: {str(e)}")
+            # 清理资源
+            stream.stop_stream()
+            stream.close()
+            audio.terminate()
+            return ""
+            
         # print("停止录音!")
         self.messageSignal.emit(f"{self.name()} 停止录音!")
+        self.messageSignal.emit(f"调试: 总共录制了 {frame_count} 帧音频")
         stream.stop_stream()
         stream.close()
         audio.terminate()
 
+        # 检查是否有足够的音频数据
+        if len(frames) < 10:  # 至少需要一些帧才能进行识别
+            self.messageSignal.emit(f"警告: 录制的音频数据太少，无法进行识别")
+            return ""
+
+        # 添加识别开始的打印
+        self.messageSignal.emit(f"调试: 开始识别语音...")
         rec = KaldiRecognizer(model, RATE)
         rec.SetWords(True)
         str_ret = ""
@@ -188,10 +263,14 @@ class VOSKRecognitionNode(BaseNode):
                 result = json.loads(rec.Result())
                 if 'text' in result:
                     str_ret += result['text']
+                    self.messageSignal.emit(f"调试: 部分识别结果: {result['text']}")
 
         result = json.loads(rec.FinalResult())
         if 'text' in result:
             str_ret += result['text']
+            self.messageSignal.emit(f"调试: 最终识别结果: {result['text']}")
+        else:
+            self.messageSignal.emit(f"警告: 未能识别出任何文本")
 
         str_ret = "".join(str_ret.split())
         return str_ret
