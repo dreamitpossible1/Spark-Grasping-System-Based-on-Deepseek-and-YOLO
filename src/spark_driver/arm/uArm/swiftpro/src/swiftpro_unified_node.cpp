@@ -100,7 +100,7 @@ void read_position_thread(ros::Publisher &pub)
                 current_state.y = position[1];
                 current_state.z = position[2];
                 pub.publish(current_state);
-                ROS_INFO("Position: %.2f %.2f %.2f %.2f", position[0], position[1], position[2], position[3]);
+                // ROS_INFO("Position: %.2f %.2f %.2f %.2f", position[0], position[1], position[2], position[3]);
             }
         }
         

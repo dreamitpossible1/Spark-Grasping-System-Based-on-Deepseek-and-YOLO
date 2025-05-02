@@ -10,7 +10,6 @@ import socket
 import json
 import threading
 import time
-import subprocess
 from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
 from swiftpro.msg import SwiftproState
@@ -43,17 +42,12 @@ class RobotControlServer:
             rospy.init_node(self.node_name, anonymous=True)
         
         # Create publishers for position and pump control
-        # Make sure we're publishing to the exact topic names that the robot driver is expecting
-        self.pub_position = rospy.Publisher('/position_write_topic', position, queue_size=10)
-        self.pub_pump = rospy.Publisher('/pump_topic', status, queue_size=10)
+        self.pub_position = rospy.Publisher('position_write_topic', position, queue_size=10)
+        self.pub_pump = rospy.Publisher('pump_topic', status, queue_size=10)
         
-        # Get topic info for debugging
-        rospy.loginfo(f"Position publisher topic: {self.pub_position.name}")
-        rospy.loginfo(f"Pump publisher topic: {self.pub_pump.name}")
-        
-        # Create subscribers for robot state with correct topic names
+        # Create subscribers for robot state
         self.sub_end_pose = rospy.Subscriber(
-            '/SwiftproState_topic',
+            'SwiftproState_topic',
             SwiftproState,
             self.end_pose_listener_callback,
             queue_size=10)
@@ -64,37 +58,13 @@ class RobotControlServer:
             self.joint_states_listener_callback,
             queue_size=10)
         
-        # List active topics for debugging
-        try:
-            rospy.loginfo("Listing active topics for debugging...")
-            result = subprocess.run("rostopic list", shell=True, capture_output=True, text=True)
-            if result.returncode == 0:
-                topics = result.stdout.split('\n')
-                for topic in topics:
-                    if 'position' in topic or 'pump' in topic or 'swift' in topic.lower():
-                        rospy.loginfo(f"Found relevant topic: {topic}")
-            else:
-                rospy.logwarn("Failed to list topics")
-        except Exception as e:
-            rospy.logwarn(f"Error listing topics: {str(e)}")
-        
         self.is_node_created = True
         rospy.loginfo(f"{self.node_name} initialized")
     
     def end_pose_listener_callback(self, msg):
         """Callback for robot end effector pose"""
-        rospy.loginfo(f"Received robot state update: x={msg.x}, y={msg.y}, z={msg.z}, pump={msg.pump}")
-        
-        # Store the current position and orientation (with default orientation values)
-        self.end_pose = [msg.x, msg.y, msg.z, 0.0, 0.0, 0.0, 1.0]
-        
-        # Update the pump status
-        old_pump_status = self.pump_status
-        self.pump_status = msg.pump
-        if old_pump_status != self.pump_status:
-            rospy.loginfo(f"Pump status changed: {old_pump_status} -> {self.pump_status}")
-        
-        # Set flag to indicate we have received end pose data
+        self.end_pose = [msg.x, msg.y, msg.z, 0.0, 0.0, 0.0, 1.0]  # Default orientation values
+        self.pump_status = msg.pump  # 更新当前吸盘状态
         self.is_get_end_pose = True
     
     def joint_states_listener_callback(self, msg):
@@ -151,7 +121,7 @@ class RobotControlServer:
                 "position.z": pos_msg.z
             }
             
-            # Handle pump control first if requested
+            # Extract pump state (if provided)
             pump_state = None
             if 'pump_value' in command_data or 'pump_state' in command_data:
                 pump_msg = status()
@@ -165,65 +135,29 @@ class RobotControlServer:
                     pump_state = command_data['pump_state'].lower()
                     pump_msg.status = 1 if pump_state == 'on' else 0
                 
-                # Send pump command - both via publisher and direct rostopic command for redundancy
+                # Send pump command
                 self.pub_pump.publish(pump_msg)
-                rospy.loginfo(f"Pump command sent via publisher: {pump_state}")
-                
-                # Also send via direct rostopic command
-                try:
-                    pump_cmd = f"rostopic pub -1 /pump_topic swiftpro/status \"status: {pump_msg.status}\""
-                    rospy.loginfo(f"Also sending pump command via direct rostopic: {pump_cmd}")
-                    result = subprocess.run(pump_cmd, shell=True, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        rospy.loginfo("Direct pump command executed successfully")
-                    else:
-                        rospy.logwarn(f"Direct pump command returned error code {result.returncode}")
-                except Exception as cmd_err:
-                    rospy.logerr(f"Error executing direct pump command: {str(cmd_err)}")
-                
-                # Wait briefly for pump command to take effect
-                rospy.sleep(1.0)
+                rospy.loginfo(f"Pump command sent: {pump_state}")
             
-            # Now handle position control
             # Debug output of message before publishing
             rospy.loginfo(f"Position message details - Type: {type(pos_msg).__name__}, Fields: x={pos_msg.x}, y={pos_msg.y}, z={pos_msg.z}, speed={pos_msg.speed}")
             
-            # Method 1: Using the publisher
-            rospy.loginfo(f"Method 1: Publishing position command via publisher to topic: {self.pub_position.name}")
-            self.pub_position.publish(pos_msg)
-            
-            # Method 2: Direct rostopic command
+            # Send position command
+            rospy.loginfo(f"Publishing position command to topic: position_write_topic")
             try:
-                # Format with proper YAML syntax for the rostopic command
-                pos_cmd = f"rostopic pub -1 /position_write_topic swiftpro/position \"x: {pos_msg.x}\ny: {pos_msg.y}\nz: {pos_msg.z}\nspeed: {pos_msg.speed}\""
-                rospy.loginfo(f"Method 2: Sending position command via direct rostopic: {pos_cmd}")
+                # Try publishing the message and log the result
+                self.pub_position.publish(pos_msg)
+                rospy.loginfo("Position message published successfully")
                 
-                # Run the command
-                result = subprocess.run(pos_cmd, shell=True, capture_output=True, text=True)
-                if result.returncode == 0:
-                    rospy.loginfo("Direct rostopic position command executed successfully")
-                    if result.stdout:
-                        rospy.loginfo(f"Command output: {result.stdout}")
-                else:
-                    rospy.logwarn(f"Direct rostopic position command returned error code {result.returncode}")
-                    if result.stderr:
-                        rospy.logwarn(f"Error output: {result.stderr}")
-            except Exception as cmd_err:
-                rospy.logerr(f"Error executing direct rostopic position command: {str(cmd_err)}")
-            
-            # Method 3: Using a more basic G-code style command that matches what we see in swiftpro_write_node.cpp
-            try:
-                # Format in the style seen in swiftpro_write_node.cpp
-                gcode_cmd = f"G0 X{pos_msg.x} Y{pos_msg.y} Z{pos_msg.z} F{pos_msg.speed}"
-                rospy.loginfo(f"Method 3: Converting to G-code style command: {gcode_cmd}")
+                # For debugging, also try publishing using the raw rostopic command format
+                debug_cmd = f"rostopic pub -1 /position_write_topic swiftpro/position \"x: {pos_msg.x}\ny: {pos_msg.y}\nz: {pos_msg.z}\nspeed: {pos_msg.speed}\" &"
+                rospy.loginfo(f"Equivalent rostopic command would be: {debug_cmd}")
                 
-                # This is just logging - we're not actually sending the G-code directly yet
-                # The real sending happens via the rostopic messages
-            except Exception as e:
-                rospy.logwarn(f"Error formatting G-code: {str(e)}")
+            except Exception as pub_err:
+                rospy.logerr(f"Error publishing position message: {str(pub_err)}")
             
             # Wait for execution (with timeout)
-            wait_time = 5.0  # Increased wait time to ensure movement completes
+            wait_time = 3.0
             rospy.loginfo(f"Waiting {wait_time} seconds for robot movement to complete...")
             rospy.sleep(wait_time)
             
@@ -231,14 +165,13 @@ class RobotControlServer:
             final_pose = self.get_end_pose()
             if final_pose:
                 rospy.loginfo(f"Final robot position after movement: x={final_pose[0]}, y={final_pose[1]}, z={final_pose[2]}")
-                # Update position values with actual values
                 position_values = {
                     "position.x": final_pose[0],
                     "position.y": final_pose[1],
                     "position.z": final_pose[2]
                 }
             
-            rospy.loginfo(f"Command execution completed for position [{pos_msg.x}, {pos_msg.y}, {pos_msg.z}]")
+            rospy.loginfo(f"Command executed: position [{pos_msg.x}, {pos_msg.y}, {pos_msg.z}]")
             
             # Create response with position data and pump state if available
             response = {
