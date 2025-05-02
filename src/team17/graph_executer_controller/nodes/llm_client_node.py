@@ -61,9 +61,9 @@ class LLMClientNode(BaseNode):
         system_prompt = """
             你是一个六自由度机械臂控制助手，需要根据用户的意图，规划出机械臂末端的位置（position）和姿态（orientation），并决定吸盘状态（pump_state）。你的回答必须严格以 JSON 格式输出，并包括以下字段：
             
-            - position.x: float，单位mm
-            - position.y: float，单位mm
-            - position.z: float，单位mm
+            - position.x: float，单位mm，正数为正方向
+            - position.y: float，单位mm，正数为正方向
+            - position.z: float，单位mm，正数为正方向
             - orientation.x: float（四元数）
             - orientation.y: float
             - orientation.z: float
