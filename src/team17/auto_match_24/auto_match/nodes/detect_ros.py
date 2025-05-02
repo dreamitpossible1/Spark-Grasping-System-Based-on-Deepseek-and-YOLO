@@ -14,10 +14,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 import platform
 import pathlib
-<<<<<<< Updated upstream
 import threading
-=======
->>>>>>> Stashed changes
 plt = platform.system()
 if plt != 'Windows':
     pathlib.WindowsPath = pathlib.PosixPath
@@ -38,7 +35,6 @@ class SparkDetect:
         初始化YOLOv5检测器
         :param model_path: YOLOv5模型文件路径
         '''
-<<<<<<< Updated upstream
         self.model = None
         # COCO数据集的80个类别
         self.coco_names = {
@@ -130,23 +126,6 @@ class SparkDetect:
             rospy.logerr(f"图像类型转换失败: {str(e)}")
             return self.__results__()
 
-=======
-        try:
-            self.model = yolov5.load(model_path)
-        except Exception as e:
-            rospy.logerr(f"加载模型失败:{e}, 开始下载")
-            # 下载模型
-            url = "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n-seg.pt"
-            stat = os.system("wget " + url + " -O " + model_path)
-            if not (os.path.exists(model_path) or stat):
-                rospy.logerr("下载模型失败")
-                os.remove(model_path)
-                return
-            rospy.loginfo("下载模型成功")
-            self.model = yolov5.load(model_path)
-
-    def detect(self, image):
->>>>>>> Stashed changes
         '''
         检测图像中的物体
         :param image: 输入图像
@@ -157,7 +136,6 @@ class SparkDetect:
                   result.confidence: 物体置信度列表
                   result.image: 检测后的图像
         '''
-<<<<<<< Updated upstream
         # 存储检测结果的列表
         result = self.__results__()
         result.image = image.copy()  # 保存原始图像的副本
@@ -212,38 +190,6 @@ class SparkDetect:
             import traceback
             rospy.logerr(f"堆栈跟踪:\n{traceback.format_exc()}")
             # 即使发生错误，也返回带有原始图像的结果对象
-=======
-        results = self.model(image, augment=True)
-
-        # 存储检测结果的列表
-        result = self.__results__()
-
-        # 遍历检测结果
-        try:
-            for *xyxy, conf, cls in results.xyxy[0]:
-                # 计算中心点坐标
-                center_x = int((xyxy[0] + xyxy[2]) / 2)
-                center_y = int((xyxy[1] + xyxy[3]) / 2)
-                # 计算大小
-                size_x = int(xyxy[2] - xyxy[0])
-                size_y = int(xyxy[3] - xyxy[1])
-                # 绘制图像
-                label = f'{self.model.model.names[int(cls)]} ({center_x},{center_y})'
-                cv2.rectangle(image, (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3])), (0, 0, 255), 1)
-                cv2.putText(image, label, (int(xyxy[0]), int(xyxy[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 1)
-                cv2.circle(image, (center_x, center_y), 5, (255, 0, 0), -1)
-
-                # 存储中心点坐标,物体名称,置信度和图像
-                result.size_x.append(size_x)
-                result.size_y.append(size_y)
-                result.name.append(self.model.model.names[int(cls)])
-                result.x.append(center_x)
-                result.y.append(center_y)
-                result.confidence.append(float(conf))
-
-            result.image = image
-        except Exception as _:
->>>>>>> Stashed changes
             pass
 
         return result
@@ -251,7 +197,6 @@ class SparkDetect:
 
 class Detector:
     def __init__(self):
-<<<<<<< Updated upstream
         rospy.loginfo("初始化检测器...")
         self.image_pub = rospy.Publisher("result_image",Image, queue_size=1)
         self.object_pub = rospy.Publisher("/objects", Detection2DArray, queue_size=1)
@@ -333,22 +278,10 @@ class Detector:
                 rospy.logerr(f"显示线程发生错误: {e}")
         
         cv2.destroyAllWindows()
-=======
-        self.image_pub = rospy.Publisher("result_image",Image, queue_size=1)
-        self.object_pub = rospy.Publisher("/objects", Detection2DArray, queue_size=1)
-        self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber(
-            "/camera/color/image_raw", Image, self.image_cb, queue_size=1, buff_size=2**24
-            )
-        self.obj_id = {73: 'book', 41: 'cup'}
-        self.items = ['book', 'cup']
-        self.detector = SparkDetect(os.environ['HOME'] + "/yolov5n-seg.pt")
->>>>>>> Stashed changes
 
     def image_cb(self, data):
         objArray = Detection2DArray()
         try:
-<<<<<<< Updated upstream
             rospy.logdebug(f"收到图像消息，时间戳: {data.header.stamp}")
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
             if cv_image is None:
@@ -649,53 +582,11 @@ if __name__=='__main__':
     rospy.loginfo("  - 通过 /reset_bowl_list 话题可以重置bowl列表")
     rospy.loginfo("====================================================")
     
-=======
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        except CvBridgeError as e:
-            print(e)
-        image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-
-        objArray.header = data.header
-        try:
-            results = self.detector.detect(image)
-            img_bgr = results.image
-            for i in range(len(results.name)):
-                if (results.name[i] not in self.items) or results.confidence[i] < 0.5:
-                    continue
-                obj = Detection2D()
-                obj.header = data.header
-                obj_hypothesis = ObjectHypothesisWithPose()
-                obj_hypothesis.id = int(self.obj_id[results.name[i]])
-                obj_hypothesis.score = results.confidence[i]
-                obj.results.append(obj_hypothesis)
-                obj.bbox.size_y = int(results.size_y[i])
-                obj.bbox.size_x = int(results.size_x[i])
-                obj.bbox.center.x = int(results.x[i])
-                obj.bbox.center.y = int(results.y[i])
-                objArray.detections.append(obj)
-        except:
-            img_bgr = image
-        self.object_pub.publish(objArray)
-        img = cv2.cvtColor(img_bgr, cv2.COLOR_RGB2BGR)
-        try:
-            image_out = self.bridge.cv2_to_imgmsg(img, "bgr8")
-        except CvBridgeError as e:
-            print(e)
-        image_out.header = data.header
-        self.image_pub.publish(image_out)
-        
-
-if __name__=='__main__':
-    rospy.init_node('detector_node')
->>>>>>> Stashed changes
     obj=Detector()
     try:
         rospy.spin()
     except KeyboardInterrupt:
         print("ShutDown")
-<<<<<<< Updated upstream
     
     # 确保窗口关闭
-=======
->>>>>>> Stashed changes
     cv2.destroyAllWindows()

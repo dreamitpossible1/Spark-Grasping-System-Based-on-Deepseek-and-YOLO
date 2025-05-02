@@ -709,10 +709,6 @@ class AutoAction:
         self.task_cmd_sub = rospy.Subscriber("/task_start_flag", String, self.task_cmd_cb) # 订阅任务开始与否信号
         self.task_run_th = threading.Thread(target=lambda: "pass") # 创建线程对象
         self.stop_flag = False  # 任务的启停标志
-<<<<<<< Updated upstream
-=======
-        self.can_task_once = True
->>>>>>> Stashed changes
 
         # 订阅机械臂手动控制的话题
         self.grasp_sub = rospy.Subscriber("grasp", String, self.grasp_cb)
@@ -730,17 +726,12 @@ class AutoAction:
 
         # ==== 离开起始区,避免在膨胀区域中，导致导航失败 =====
         self.robot.step_go(0.3)
-<<<<<<< Updated upstream
-=======
-        # self.robot.step_rotate(-0.5)
->>>>>>> Stashed changes
 
         if self.stop_flag: return
 
         # ==== 移动机械臂 =====
         self.arm.arm_default_pose()  # 移动机械臂到其他地方
 
-<<<<<<< Updated upstream
         # =======开始循环运行前往整理区抓取与放置任务======
         while True:
             # =====导航到整理区====
@@ -749,32 +740,6 @@ class AutoAction:
 
             go_num = 0
             while True:
-=======
-        
-
-        # ===== 导航到分类区 =====
-        if self.robot.goto_local("Classification_area"):
-            rospy.sleep(2)
-            items_place_dict = self.cam.get_recriving_area_location()
-        else :
-            rospy.logerr("Navigation to Classification_area failed,please run task again ")
-            self.stop_flag = True
-
-        sorting_name = "Sorting_DA"
-
-        # =======开始循环运行前往中心区域抓取与放置任务======
-        while True:
-            # 根据任务安排逐步执行
-            print("readying to sort_areas")
-
-            # =====导航到目标地点====
-
-            ret = self.robot.goto_local(sorting_name) # 导航到目标点
-            rospy.sleep(0.5) # 停稳
-
-            go_num = 0
-            while True:     # 新增##############################################################
->>>>>>> Stashed changes
                 cube_list = self.cam.detector() # 获取识别到的物体信息
                 if len(cube_list) < 1:
                     self.robot.step_go_pro(0.2, time=0.5)
@@ -787,10 +752,6 @@ class AutoAction:
                     self.robot.step_go_pro(0)
                     break
 
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
             if self.stop_flag: return
 
             # =====识别并抓取物体====
@@ -819,27 +780,7 @@ class AutoAction:
                         rospy.sleep(1.5)
                         item_type = self.arm.grasp()
                         rospy.sleep(0.5)
-<<<<<<< Updated upstream
                 
-=======
-                if item_type == 0 or item_type == 1:
-                    if self.arm.complete[46] and self.arm.complete[88] and self.arm.complete[85]:
-                        self.stop_flag = True
-                        return
-                    else:
-                        if self.can_task_once:
-                            self.can_task_once = False
-                            sorting_name == "Sorting_DA"
-                        else:
-                            if sorting_name == "Sorting_DA":
-                                sorting_name = "Sorting_AB"
-                            elif sorting_name == "Sorting_AB":
-                                sorting_name = "Sorting_BC"
-                            elif sorting_name == "Sorting_BC":
-                                sorting_name = "Sorting_CD"
-                            elif sorting_name == "Sorting_CD":
-                                sorting_name = "Sorting_DA"
->>>>>>> Stashed changes
                 rospy.loginfo("========向后退一点=====")
                 for _ in range(i + 3):
                     self.robot.step_go_pro(-0.15)  # 后退
@@ -851,7 +792,6 @@ class AutoAction:
 
             # ====放置物品====
             self.arm.arm_default_pose()
-<<<<<<< Updated upstream
             rospy.loginfo("========前往摆放区=====")
             ret = self.robot.goto_local("placement_area") # 导航到摆放区
             rospy.sleep(2.0) # 停稳
@@ -862,34 +802,10 @@ class AutoAction:
                 rospy.logwarn("task error: navigation to the placement_area fails!!!")
                 rospy.loginfo("continue to next task")
             
-=======
-            rospy.loginfo("========前往放置区=====")
-            ret = self.robot.goto_local(items_place_dict[item_type]) # 根据抓到的物品类型，导航到对应的放置区
-            rospy.sleep(2.0) # 停稳
-
-            if ret:
-                pass
-            else:
-                rospy.logwarn("task error: navigation to the drop_place fails!!!")
-                rospy.loginfo("continue to next task")
-            self.arm.drop(item_type)
->>>>>>> Stashed changes
             self.robot.step_back(distance=0.4)
             if self.stop_flag:
                 self.stop_flag = False
 
-<<<<<<< Updated upstream
-=======
-            # 下一步
-            if items_place_dict[item_type] == "Collection_B":
-                sorting_name = "Sorting_AB"
-            elif items_place_dict[item_type] == "Collection_C":
-                sorting_name = "Sorting_BC"
-            elif items_place_dict[item_type] == "Collection_D":
-                sorting_name = "Sorting_CD"
-
-
->>>>>>> Stashed changes
     def task_cmd_cb(self,flag):
         if flag:
             if not self.task_run_th.is_alive():
