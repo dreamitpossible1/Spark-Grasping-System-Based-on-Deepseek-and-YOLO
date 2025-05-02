@@ -151,8 +151,10 @@ class VOSKRecognitionNode(BaseNode):
         RATE = 16000  # 采样率调整为16000Hz，与Microphone类一致
         CHUNK = 512  # 单位帧，与Microphone类一致
         THRESHOLDNUM = 30  # 静默时间，超过这个个数就保存文件
-        THRESHOLD = 7000  # 提高停止采集阈值，适应嘈杂环境 (原先是50)
+        THRESHOLD = 5000  # 降低停止采集阈值，避免将背景噪音误认为语音 (之前是7000)
         MAX_RECORDING_TIME = 10  # 最长录音时间（秒）
+        MIN_RECORDING_TIME = 2   # 最短录音时间，确保至少录制这么长时间
+        WARMUP_TIME = 1.5        # 初始等待时间，让用户准备好
         
         # 尝试禁止ALSA错误消息显示
         # 重定向stderr到/dev/null来抑制ALSA错误消息
@@ -262,11 +264,28 @@ class VOSKRecognitionNode(BaseNode):
         # print("开始录音...")
         self.messageSignal.emit(f"{self.name()} 开始录音...")
         self.messageSignal.emit(f"调试信息: 阈值设置为 {THRESHOLD}，需要 {THRESHOLDNUM} 帧低于阈值才会停止录音")
-        self.messageSignal.emit(f"调试信息: 最长录音时间为 {MAX_RECORDING_TIME} 秒")
+        self.messageSignal.emit(f"调试信息: 最长录音时间为 {MAX_RECORDING_TIME} 秒，最短录音时间为 {MIN_RECORDING_TIME} 秒")
+        self.messageSignal.emit(f"调试信息: 系统将等待 {WARMUP_TIME} 秒让你准备好...")
         
+        # 初始等待时间，让用户准备好开始说话
+        warmup_start = time.time()
+        while time.time() - warmup_start < WARMUP_TIME:
+            # 在等待期间清空缓冲区
+            if stream.is_active():
+                stream.read(CHUNK, exception_on_overflow=False)
+            time.sleep(0.1)
+        
+        self.messageSignal.emit(f"调试: 等待结束，请开始说话")
+        
+        # 检测阶段变量
         count = 0
         frame_count = 0
         start_time = time.time()
+        
+        # 用于计算能量基线的变量
+        energy_levels = []
+        energy_baseline = None
+        calibration_frames = 10  # 用于计算基线的帧数
         
         try:
             # 添加时间限制条件
@@ -276,20 +295,30 @@ class VOSKRecognitionNode(BaseNode):
                     np_data = np.frombuffer(data, dtype=np.int16)
                     frame_energy = np.mean(np.abs(np_data))
                     
-                    frame_count += 1
-                    if frame_count % 20 == 0:  # 由于帧大小减小，调整打印频率
-                        elapsed_time = time.time() - start_time
-                        self.messageSignal.emit(f"调试: 帧 {frame_count}, 能量 {frame_energy:.2f}, 静默计数 {count}/{THRESHOLDNUM}, 已录音 {elapsed_time:.1f}秒")
+                    # 收集前几帧用于计算能量基线
+                    if frame_count < calibration_frames:
+                        energy_levels.append(frame_energy)
+                        if frame_count == calibration_frames - 1:
+                            energy_baseline = np.mean(energy_levels) * 1.1  # 基线稍微提高一点
+                            THRESHOLD = max(THRESHOLD, energy_baseline)  # 使用计算出的基线或原阈值中较大的
+                            self.messageSignal.emit(f"调试: 检测到环境噪音基线: {energy_baseline:.2f}，设置阈值为: {THRESHOLD:.2f}")
                     
-                    # 如果能量低于阈值持续时间过长，则停止录音
-                    if frame_energy < THRESHOLD:
-                        count += 1
-                        if count % 5 == 0:  # 每累积5个静默帧打印一次
-                            self.messageSignal.emit(f"调试: 检测到静默 {count}/{THRESHOLDNUM}")
-                    elif count > 0:
-                        if count > 10:  # 如果有明显的计数减少，打印提示
-                            self.messageSignal.emit(f"调试: 检测到声音，静默计数重置从 {count} ")
-                        count -= 1
+                    frame_count += 1
+                    elapsed_time = time.time() - start_time
+                    
+                    # 只有在超过最短录音时间后才考虑停止
+                    if elapsed_time >= MIN_RECORDING_TIME:
+                        if frame_energy < THRESHOLD:
+                            count += 1
+                            if count % 5 == 0:  # 每累积5个静默帧打印一次
+                                self.messageSignal.emit(f"调试: 检测到静默 {count}/{THRESHOLDNUM}, 当前能量: {frame_energy:.2f}")
+                        elif count > 0:
+                            if count > 10:  # 如果有明显的计数减少，打印提示
+                                self.messageSignal.emit(f"调试: 检测到声音，静默计数重置从 {count}，当前能量: {frame_energy:.2f}")
+                            count -= 1
+                    
+                    if frame_count % 20 == 0:  # 定期打印状态
+                        self.messageSignal.emit(f"调试: 帧 {frame_count}, 能量 {frame_energy:.2f}, 静默计数 {count}/{THRESHOLDNUM}, 已录音 {elapsed_time:.1f}秒")
 
                     frames.append(data)
                 except IOError as e:
