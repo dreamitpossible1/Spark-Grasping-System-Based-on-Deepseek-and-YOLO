@@ -150,10 +150,10 @@ class VOSKRecognitionNode(BaseNode):
         FORMAT = pyaudio.paInt16  # 音频流的格式
         RATE = 16000  # 采样率调整为16000Hz，与Microphone类一致
         CHUNK = 512  # 单位帧，与Microphone类一致
-        THRESHOLDNUM = 30  # 静默时间，超过这个个数就保存文件
+        THRESHOLDNUM = 100  # 静默时间，超过这个个数就保存文件
         THRESHOLD = 5000  # 降低停止采集阈值，避免将背景噪音误认为语音 (之前是7000)
         MAX_RECORDING_TIME = 10  # 最长录音时间（秒）
-        MIN_RECORDING_TIME = 2   # 最短录音时间，确保至少录制这么长时间
+        MIN_RECORDING_TIME = 5   # 最短录音时间，确保至少录制这么长时间
         WARMUP_TIME = 1.5        # 初始等待时间，让用户准备好
         
         # 尝试禁止ALSA错误消息显示
