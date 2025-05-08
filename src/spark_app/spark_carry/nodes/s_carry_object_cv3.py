@@ -162,8 +162,13 @@ class GraspObject(State):
         cv_image2 = cv2.cvtColor(cv_image1, cv2.COLOR_BGR2HSV)
 
         # extract blue
+<<<<<<< Updated upstream
         LowerBlue = np.array([100, 90, 80])
         UpperBlue = np.array([130, 255, 255])
+=======
+        LowerBlue = np.array([90, 50, 50])   # 降低饱和度和亮度的最小值
+        UpperBlue = np.array([130, 255, 255])  # 保持色调范围略宽
+>>>>>>> Stashed changes
         mask = cv2.inRange(cv_image2, LowerBlue, UpperBlue)
         cv_image3 = cv2.bitwise_and(cv_image2, cv_image2, mask=mask)
 
@@ -179,6 +184,10 @@ class GraspObject(State):
         cv_image5 = cv2.dilate(cv_image5, None, iterations=4)
 
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
         # detect contour
         #cv2.imshow("win1", cv_image1)
         # cv2.imshow("win2", cv_image5)
@@ -206,6 +215,22 @@ class GraspObject(State):
                     index = i
                     xc = x_mid
                     yc = y_mid
+<<<<<<< Updated upstream
+=======
+            
+            # 在原图上绘制检测到的最大轮廓和中心点
+            cv_image_debug = cv_image1.copy()
+            cv2.drawContours(cv_image_debug, [contours[index]], -1, (0,255,0), 2)
+            cv2.circle(cv_image_debug, (int(xc), int(yc)), 5, (0,0,255), -1)
+            cv2.imshow("4. Detected Object", cv_image_debug)
+            
+            # 打印位置和稳定性信息
+            print(f"Current position: ({xc:.1f}, {yc:.1f})")
+            print(f"Previous position: ({xc_prev:.1f}, {yc_prev:.1f})")
+            print(f"Position diff: dx={abs(xc-xc_prev):.1f}, dy={abs(yc-yc_prev):.1f}")
+            print(f"Stability counter: {found_count}/20")
+
+>>>>>>> Stashed changes
             # if box is not moving for 20 times
             #print found_count
             if found_count >= 20:

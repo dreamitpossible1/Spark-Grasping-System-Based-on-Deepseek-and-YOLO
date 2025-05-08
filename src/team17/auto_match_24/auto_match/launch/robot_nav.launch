@@ -1,0 +1,54 @@
+<!--机器人导航测试-->
+<launch>
+    <!-- Arguments -->
+    <arg name="open_rviz" default="true"/>
+    <arg name="lidar_type_tel" default="ydlidar_g6" doc="lidar type [3iroboticslidar2, ydlidar_g2, ydlidar_g6]"/>
+    <arg name="camera_type_tel" default="astrapro" doc="camera type [astrapro, astra, d435...]"/>
+    <arg name="run_robot_nav" default="true" doc="Whether to run the robot navigation node"/>
+
+    <!--spark底盘驱动，机器人描述,底盘,相机-->
+    <include file="$(find spark_bringup)/launch/driver_bringup.launch">
+        <arg name="camera_type_tel" value="$(arg camera_type_tel)"/>
+        <arg name="lidar_type_tel" value="$(arg lidar_type_tel)"/>
+    </include>
+
+    <!-- 启动雷达 -->
+    <include file="$(find lidar_driver_transfer)/launch/$(arg lidar_type_tel).launch">
+    </include>
+
+    <!-- 地点记录 -->
+    <node pkg="auto_match" name="mark_move" type="mark_move.py" output="screen"/>
+
+    <!-- rviz -->
+    <group if="$(arg open_rviz)">
+        <node pkg="rviz" type="rviz" name="rviz" required="true" args="-d $(find auto_match)/rviz/auto_match.rviz"/>
+    </group>
+
+    <!-- Map server-->
+    <arg name="map_file" default="$(find auto_match)/config/test_map.yaml"/>
+    <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)"/>
+
+    <!-- AMCL -->
+    <arg name="custom_amcl_launch_file" default="$(find auto_match)/config/amcl.launch.xml"/>
+    <arg name="initial_pose_x" default="0.0"/> 
+    <arg name="initial_pose_y" default="0.0"/> 
+    <arg name="initial_pose_a" default="-0.7853975"/>
+    <include file="$(arg custom_amcl_launch_file)">
+        <arg name="initial_pose_x" value="$(arg initial_pose_x)"/>
+        <arg name="initial_pose_y" value="$(arg initial_pose_y)"/>
+        <arg name="initial_pose_a" value="$(arg initial_pose_a)"/>
+    </include> 
+
+    <!-- Move base -->
+    <arg name="custom_param_file" default="$(find auto_match)/config/move_base_param/costmap_common_params.yaml"/>
+    <include file="$(find auto_match)/config/move_base_param/move_base.launch.xml">
+        <arg name="custom_param_file" value="$(arg custom_param_file)"/>
+    </include>
+
+    <!-- 启动move_demo -->
+    <include file="$(find move_demo)/launch/move_demo.launch" />
+    <!-- 启动机器人导航节点 -->
+    <group if="$(arg run_robot_nav)">
+        <node pkg="auto_match" name="robot_navigator" type="robot_navigation.py" output="screen"/>
+    </group>
+</launch>
