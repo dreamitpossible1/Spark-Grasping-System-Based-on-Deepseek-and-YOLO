@@ -17,6 +17,24 @@ Spark控制程序[***Spark Control***](https://github.com/GentsunCheng/spark-con
 * System:	Ubuntu 20.04+
 * ROS Version:	noetic(Desktop-Full Install)
 
+## 技术方案概述
+
+本项目采用双环境架构设计：
+
+### ROS环境 (Python 3.8)
+- **机械臂驱动**：修改原代码为可异步实现，支持参数写入和机械臂状态的接收（共用串口，异步收发）
+- **导航与SLAM建图**：建图期间可标定工作区域，本项目设定了两个工作区域
+- **视觉识别**：使用YOLOv5s实现对物体的检测、分割以及抓取点的获取
+- **标定系统**：机械臂和相机的标定采用两层标定法（在两个不同的z轴高度，提高精度）
+
+### LLM控制环境 (Python 3.12)
+- 基于NodeGraphQt开发，实现可视化节点编辑和工作流搭建
+- 使用LLM模型(deepseek)，根据设定的prompt完成用户命令的传达和指令的生成
+- 支持文本输入和语音输入两种交互方式
+
+### 系统集成
+- 两个环境通过socket建立本机通信，规避环境差异带来的代码兼容性问题
+
 ## 使用说明
 
 ### 机械臂控制
@@ -52,6 +70,8 @@ rostopic pub /navigation_command std_msgs/String "data: 'goto placement_area'" -
 # 导航到分拣区
 rostopic pub /navigation_command std_msgs/String "data: 'goto sorting_area'" -1
 ```
+
+注意：启动导航后需先通过2D pose estimation标定机器人所在位置，然后系统将自动避障导航到工作区域。
 
 ### 识别与抓放流程
 启动抓取功能：
@@ -100,9 +120,19 @@ export QT_QPA_PLATFORM_PLUGIN_PATH=/path/to/qt6/plugins
 ```
 
 ### 启动服务
+启动ROS服务端：
 ```bash
 python3 src/team17/auto_match_24/auto_match/nodes/start_robot_server.py
 ```
 
+启动LLM控制端：
 ```bash
 python -m src.team17.graph_executer_controller.main
+```
+
+### LLM界面选择
+- **Text input**：文本输入方式
+- **LLM Robot Control**：机器人控制接口
+- **Speach recognition by VOSK**：使用本地中文语音转文字识别的小模型
+
+注：上述topic命令可通过本地语音识别或文本输入传达给LLM，由LLM解析后执行相应操作。
