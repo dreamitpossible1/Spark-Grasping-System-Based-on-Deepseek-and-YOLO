@@ -1,8 +1,9 @@
 ## Project Title
-A Robot System for RB3 Gen2 Utilizing visual navigation
+Visual Navigation System for RB3 Gen2 Using Spark and YOLOv5
 
 ## Overview
-This project develops a robot arm system for RB3 Gen2 using depth images. RB3 Gen2 serves as the core hardware platform, offering advanced motion control and sensor capabilities. Depth images enable the robot arm to perceive 3D environments for tasks like object recognition and grasping. The Qualcomm Intelligent Robotics Product SDK is utilized for efficient image processing and seamless integration with RB3 Gen2, enhancing the system's performance and reliability.
+This project is dedicated to developing a visual navigation system for RB3 Gen2, leveraging the capabilities of Spark and YOLOv5. RB3 Gen2 serves as the core hardware platform, providing advanced motion control and sensor features. Spark is utilized for efficient data processing and distributed computing, enabling real - time analysis of depth images. YOLOv5 is employed for accurate object detection and recognition, allowing the robot arm to perceive and interact with 3D environments effectively. This combination enhances the robot's ability to navigate and perform tasks in complex environments.
+
 ## Quick Start with QualComm RB3 gen2
 Download the precompiled package for RB3 Gen2：
 
