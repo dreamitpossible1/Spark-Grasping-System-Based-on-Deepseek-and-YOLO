@@ -1,9 +1,3 @@
-# NXROBO Spark
-![Spark机器人](http://wiki.ros.org/Robots/Spark?action=AttachFile&do=get&target=spark1.png "Spark Robot")
-
-## 说明
-
-本项目为港中深25春季robot manipulation team17课程项目，此代码基于[***NXROBO Spark***](https://github.com/NXROBO/spark_noetic "NXROBO Spark")官方仓库进行修改，本项目使用 ***GPL3.0*** 协议，***使用本项目时请遵守相关协议***
 
 ## 功能包说明
 
