@@ -1,5 +1,6 @@
 ## Project Title
-Visual Navigation System for RB3 Gen2 Using Spark and YOLOv5
+Spark Grasping System for RB3 Gen2 Based on Deepseek and YOLO
+
 
 ## Overview
 This project is dedicated to developing a visual navigation system for RB3 Gen2, leveraging the capabilities of Spark and YOLOv5. RB3 Gen2 serves as the core hardware platform, providing advanced motion control and sensor features. Spark is utilized for efficient data processing and distributed computing, enabling real - time analysis of depth images. YOLOv5 is employed for accurate object detection and recognition, allowing the robot arm to perceive and interact with 3D environments effectively. This combination enhances the robot's ability to navigate and perform tasks in complex environments.
