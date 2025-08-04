@@ -54,11 +54,11 @@ This project is based on the uArm Swift Pro robotic arm, which mainly consists o
 Follow these steps to deploy and launch the robot arm system based on depth images:
 1. Clone the Repository
 ```bash
-git clone https://github.com/dreamitpossible1/Robotic-arm-grasping-based-on-Deepseek-and-YOLO.git
+git clone https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO.git
 ```
 2. Set Permissions and Run Script
 ```bash
-cd Robotic-arm-grasping-based-on-Deepseek-and-YOLO/src
+cd Spark-Grasping-System-Based-on-Deepseek-and-YOLO/src
 chmod +x run_label.sh
 ./run_label.sh
 ```
