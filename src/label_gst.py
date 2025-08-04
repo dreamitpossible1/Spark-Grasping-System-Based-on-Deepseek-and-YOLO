@@ -311,7 +311,6 @@ def create_sink_elements(args):
         sink_elements["encoder"].set_property("output-io-mode", 5)
         sink_elements["sink"].set_property("location", args.output)
     else:
-        # 不创建显示元素，只用 fakesink 丢弃视频数据
         sink_elements = {
             "display": create_element("fakesink", "display")
         }
@@ -534,3 +533,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
