@@ -40,7 +40,6 @@ git clone https://github.com/uArm-Developer/uArm-Python-SDK.git
    python setup.py install
 ```
 
-
 ## Run the System
 Follow these steps to deploy and launch the robot arm system based on depth images:
 1. Clone the Repository
@@ -54,21 +53,22 @@ chmod +x run_label.sh
 ./run_label.sh
 ```
 
-<p align="center"> <img src="https://github.com/dreamitpossible1/Robotic-arm-grasping-based-on-Deepseek-and-YOLO/blob/main/results/4.jpg" alt="Script Step 1" /> </p> <p align="center"> <img src="https://github.com/dreamitpossible1/Robotic-arm-grasping-based-on-Deepseek-and-YOLO/blob/main/results/5.png" alt="Script Step 2" /> </p>
+<p align="center"> <img src="https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO/blob/main/pictures/1.jpg" alt="Script Step 1" /> </p> <p align="center"> <img src="https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO/blob/main/pictures/9.png" alt="Script Step 2" /> </p>
 
 3. Launch the DeepSeek
 ```bash
-python yolo_server.py
+python spark_serve.py
 ```
 
 4. Control the grabbing of the robotic arm
 ```bash
-python yolo_user.py
+python spark_uarm.py
+python spark_user.py
 ```
 
 📹 Results Display
 
-[Display](https://github.com/dreamitpossible1/Robotic-arm-grasping-based-on-Deepseek-and-YOLO/blob/main/results/Robotic-arm-grasping-based-on-Deepseek-and-YOLO.mp4)
+[Display](https://vcnkc4612xpy.feishu.cn/file/EmUZbfb5Lo0DyTxsHyPc8y3dn0f?from=from_copylink)
 
 ## Reference
 
