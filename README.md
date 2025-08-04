@@ -40,15 +40,6 @@ git clone https://github.com/uArm-Developer/uArm-Python-SDK.git
    python setup.py install
 ```
 
-## 🦾 Project Overview
-
-This project is based on the uArm Swift Pro robotic arm, which mainly consists of the following components:
-
-- **End Effector**: Equipped with a suction pump, used for picking up and moving Mahjong tiles.
-- **Drive System**: Composed of four servo motors, each controlling one degree of freedom (4-DoF), enabling precise and smooth motion control.
-- **Control System**: An integrated controller that supports both Arduino and Python development environments, serving as the core control unit of the robotic arm.
- 
-> ✳️ The uArm Swift Pro is a four-axis (4-DoF) robotic manipulator known for its high precision and repeatability, making it ideal for lightweight object manipulation and interactive gaming tasks.
 
 ## Run the System
 Follow these steps to deploy and launch the robot arm system based on depth images:
