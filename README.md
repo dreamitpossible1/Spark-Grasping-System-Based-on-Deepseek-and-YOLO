@@ -46,6 +46,7 @@ Follow these steps to deploy and launch the robot arm system based on depth imag
 ```bash
 git clone https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO.git
 ```
+
 2. Set Permissions and Run Script
 ```bash
 cd Spark-Grasping-System-Based-on-Deepseek-and-YOLO/src
@@ -53,18 +54,24 @@ chmod +x run_label.sh
 ./run_label.sh
 ```
 
-<p align="center"> <img src="https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO/blob/main/pictures/1.jpg" alt="Script Step 1" /> </p> <p align="center"> <img src="https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO/blob/main/pictures/9.png" alt="Script Step 2" /> </p>
+3. Launch the Spark
+```bash
+chmod +x onekey.sh
+./onekey.sh
+```
 
-3. Launch the DeepSeek
+4. Launch the DeepSeek
 ```bash
 python spark_serve.py
 ```
 
-4. Control the grabbing of the robotic arm
+5. Control the grabbing of the robotic arm
 ```bash
 python spark_uarm.py
 python spark_user.py
 ```
+
+<p align="center"> <img src="https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO/blob/main/pictures/1.jpg" alt="Script Step 1" /> </p> <p align="center"> <img src="https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO/blob/main/pictures/9.png" alt="Script Step 2" /> </p>
 
 📹 Results Display
 
