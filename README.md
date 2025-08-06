@@ -54,7 +54,7 @@ chmod +x run_label.sh
 ./run_label.sh
 ```
 
-3. Launch the Spark
+3. Set Permissions and Launch the Spark
 ```bash
 chmod +x onekey.sh
 ./onekey.sh
