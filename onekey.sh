@@ -8,7 +8,6 @@ export ROS_MASTER_URI=http://${MASTER_IP}:11311
 export ROS_HOSTNAME=${SLAVE_IP}
 source ~/spark_cao/devel/setup.bash
 
-
 #=================================================
 #       System Required: Ubuntu 14.04+
 #       Description: Install ROS And Spark
@@ -17,7 +16,6 @@ source ~/spark_cao/devel/setup.bash
 #       Site: http://www.nxrobo.com/
 #       SPARK技术讨论与反馈群：8346256
 #=================================================
-
 
 sh_ver="1.1.0"
 filepath=$(cd "$(dirname "$0")"; pwd)
@@ -34,7 +32,6 @@ OSDescription=$(lsb_release -d --short)
 OSArch=$(uname -m)
 calibra_default="${filepath}/../.ros/camera_info"
 
-
 #检查系统要求
 check_sys(){
         if [[ "${Version}" == "14.04" ]]; then
@@ -48,11 +45,10 @@ check_sys(){
         fi
 }
 
-#检查设备连接
 check_dev(){
         #检查底盘
         if [ ! -n "$(lsusb -d 1a86:7523)" ]; then
-                echo -e "${Error} 底盘没有正确连接，请确认正确连接！！"
+                echo -e "${Error}
         fi
 }
 
