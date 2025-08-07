@@ -62,7 +62,6 @@ def update_current_objects(current_labels):
 def handle_interrupt_signal(pipeline, mloop):
     """Handle Ctrl+C."""
     global waiting_for_eos
-
     _, state, _ = pipeline.get_state(Gst.CLOCK_TIME_NONE)
     if state != Gst.State.PLAYING or waiting_for_eos:
         mloop.quit()
@@ -104,7 +103,6 @@ def print_detection_results(sink, buffer, info, data):
             
             # Extract labels
             current_labels = extract_label(text)
-            
             # Parse coordinates for center calculation
             center_info = []
             if current_labels:
@@ -115,9 +113,6 @@ def print_detection_results(sink, buffer, info, data):
                 for i, label in enumerate(current_labels):
                     if i < len(coord_matches):
                         try:
-                            # Clean coordinate string - remove all backslashes and extra spaces
-                            coord_str = coord_matches[i]
-                            # Remove all backslashes and clean up
                             coord_str = re.sub(r'\\+', '', coord_str)
                             coord_str = coord_str.replace(' ', '')
                             
@@ -533,4 +528,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
