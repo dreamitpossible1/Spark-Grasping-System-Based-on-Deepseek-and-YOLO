@@ -102,7 +102,6 @@ class TakeUser:
             x1, y1 =v1
             x2, y2 =v2
             return x1*y2 -x2*y1
-        """See video: https://www.youtube.com/watch?v=Qh15Nol5htM."""
         v1 = [math.cos(self_pose['theta']), math.sin(self_pose['theta'])]
         v2 = [goal_pose['x'] - self_pose['x'], goal_pose['y'] - self_pose['y']]
         return max(min(constant * math.copysign(angle(v1,v2),crossproduct(v1,v2)), 3), -3)
@@ -164,7 +163,7 @@ class TakeUser:
             print("\n=== completed ===")
             
         except Exception as e:
-            print(f"执行过程中发生错误: {e}")
+            print(f"error: {e}")
         finally:
             self.stop_robot()
 
@@ -215,7 +214,7 @@ class TakeUser:
             self.move_to_target(self.home_position)
             
         except Exception as e:
-            print(f"执行过程中发生错误: {e}")
+            print(f"error: {e}")
         finally:
             self.stop_robot()
 
@@ -266,7 +265,7 @@ class TakeUser:
             self.move_to_target(self.home_position)
             
         except Exception as e:
-            print(f"执行过程中发生错误: {e}")
+            print(f"erro: {e}")
         finally:
             self.stop_robot()
 
@@ -377,4 +376,3 @@ finally:
         pass
     client_socket.close()
     uarm_client_socket.close()
-
