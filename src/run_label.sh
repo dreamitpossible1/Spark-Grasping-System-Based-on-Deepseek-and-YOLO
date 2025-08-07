@@ -1,4 +1,3 @@
-#ng
 python3 label_gst.py \
     -f 2 \
     -ml yolov5 \
