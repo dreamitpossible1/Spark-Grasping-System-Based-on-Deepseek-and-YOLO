@@ -8,7 +8,7 @@ import select
 import queue
 
 client = OpenAI(
-    api_key="sk-b765ec4ae6e64e8b8e754ffa4abfe957",
+    api_key="sk-************************",
     base_url="https://api.deepseek.com"
 )
 
@@ -232,4 +232,3 @@ while True:
     except Exception as e:
         print(f"发生错误：{str(e)}")
         break
-
