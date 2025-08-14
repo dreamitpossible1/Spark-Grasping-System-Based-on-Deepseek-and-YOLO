@@ -6,6 +6,7 @@ Spark Grasping System for RB3 Gen2 Based on Deepseek and YOLO
 This project delivers a Spark grasping system for the RB3 Gen2, powered by Deepseek and YOLO. Leveraging the RB3 Gen2’s advanced motion control and sensor technologies, the platform establishes a robust foundation. YOLO handles real-time object detection, rapidly identifying target objects within the environment, while Deepseek drives decision-making by analyzing data to formulate optimal grasping strategies. Working in concert, these components enable the robotic arm to execute grasping tasks with both high efficiency and precision. Integration of the Qualcomm® Intelligent Robotics Product SDK ensures seamless interoperability among all system modules and further elevates overall reliability.
 
 <p align="center"> <img src="https://github.com/dreamitpossible1/Spark-Grasping-System-Based-on-Deepseek-and-YOLO/blob/main/pictures/Technical%20flowchart.png" alt="Script Step 1" /> </p>
+<p align="center"><i>Figure 1: Technical Flowchart</i></p>
 
 
 ## Quick Start with QualComm RB3 gen2
