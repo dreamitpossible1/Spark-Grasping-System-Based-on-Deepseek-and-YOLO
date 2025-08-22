@@ -18,7 +18,7 @@ class TakeUser:
         self.running = True   
         TARGET_THETA = 1.57
         self.home_position = {'x': 0.79, 'y': -5.87, 'theta': TARGET_THETA} 
-        self.target_positions = {
+        self.spark_target_positions = {
             'cell.phone': {'x': 0.74, 'y': -4.80, 'theta': TARGET_THETA},
             'cup': {'x': 1.30, 'y': -4.89, 'theta': TARGET_THETA},
             'mouse': {'x': 0.20, 'y': -4.82, 'theta': TARGET_THETA}
@@ -121,7 +121,7 @@ class TakeUser:
 
     def execute_scissor_action(self):       
         try:           
-            target_pos = self.target_positions['cell.phone'] 
+            target_pos = self.spark_target_positions['cell.phone'] 
             self.move_to_target(target_pos)           
             time.sleep(5)
             client_socket.sendto(f"ready:cell.phone".encode(), server_address)
@@ -172,7 +172,7 @@ class TakeUser:
             waypoint = {'x': 0.80, 'y': -5.16, 'theta': 1.51}
             return_waypoint = {'x': 0.76, 'y': -5.00, 'theta': -1.59}
             self.move_to_target(waypoint)
-            target_pos = self.target_positions['cup']
+            target_pos = self.spark_target_positions['cup']
             self.move_to_target(target_pos)
             time.sleep(5)
             client_socket.sendto(f"ready:cup".encode(), server_address)
@@ -223,7 +223,7 @@ class TakeUser:
             waypoint = {'x': 0.80, 'y': -5.16, 'theta': 1.51}
             return_waypoint = {'x': 0.76, 'y': -5.00, 'theta': -1.59}
             self.move_to_target(waypoint)
-            target_pos = self.target_positions['mouse']
+            target_pos = self.spark_target_positions['mouse']
             self.move_to_target(target_pos)
             time.sleep(5)
             client_socket.sendto(f"ready:mouse".encode(), server_address)
@@ -376,3 +376,4 @@ finally:
         pass
     client_socket.close()
     uarm_client_socket.close()
+
