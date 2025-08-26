@@ -1,6 +1,3 @@
-#ght (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
-# SPDX-License-Identifier: BSD-3-Clause-Clear
-
 import os
 import sys
 import signal
@@ -62,6 +59,7 @@ def update_current_objects(current_labels):
 def handle_interrupt_signal(pipeline, mloop):
     """Handle Ctrl+C."""
     global waiting_for_eos
+
     _, state, _ = pipeline.get_state(Gst.CLOCK_TIME_NONE)
     if state != Gst.State.PLAYING or waiting_for_eos:
         mloop.quit()
@@ -103,6 +101,7 @@ def print_detection_results(sink, buffer, info, data):
             
             # Extract labels
             current_labels = extract_label(text)
+            
             # Parse coordinates for center calculation
             center_info = []
             if current_labels:
@@ -113,6 +112,9 @@ def print_detection_results(sink, buffer, info, data):
                 for i, label in enumerate(current_labels):
                     if i < len(coord_matches):
                         try:
+                            # Clean coordinate string - remove all backslashes and extra spaces
+                            coord_str = coord_matches[i]
+                            # Remove all backslashes and clean up
                             coord_str = re.sub(r'\\+', '', coord_str)
                             coord_str = coord_str.replace(' ', '')
                             
@@ -306,6 +308,7 @@ def create_sink_elements(args):
         sink_elements["encoder"].set_property("output-io-mode", 5)
         sink_elements["sink"].set_property("location", args.output)
     else:
+        # 不创建显示元素，只用 fakesink 丢弃视频数据
         sink_elements = {
             "display": create_element("fakesink", "display")
         }
