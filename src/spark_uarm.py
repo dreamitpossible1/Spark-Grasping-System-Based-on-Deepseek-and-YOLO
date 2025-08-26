@@ -1,5 +1,3 @@
-#!/usr/bin/env python2
-# -*- encoding: UTF-8 -*-
 import rospy
 import geometry_msgs.msg
 from utils import y_to_z, euler_from_quaternion_y_up
@@ -18,13 +16,17 @@ class SparkUarm():
         
         self.spark_uarm_pose = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
         signal.signal(signal.SIGINT, self.signal_handler)
+        
         self.UDP_IP = "192.168.1.73"
         self.UDP_PORT = 9091
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server_socket.bind((self.UDP_IP, self.UDP_PORT))
-        self.client_addresses = set() 
+        self.client_addresses = set()  
+        
         self.udp_thread = threading.Thread(target=self.udp_server_thread, daemon=True)
         self.udp_thread.start()
+        
+        print(f"Spark UArm UDP服务器启动: {self.UDP_IP}:{self.UDP_PORT}")
 
     def udp_server_thread(self):
         while True:
@@ -44,21 +46,27 @@ class SparkUarm():
                 try:
                     self.server_socket.sendto(position_data.encode(), client_addr)
                 except Exception as e:
+                    print(f"发送位置数据失败 {client_addr}: {e}")
                     self.client_addresses.discard(client_addr)
 
     def sparkUarmCallback(self, data):
         self.spark_uarm_pose['x'], self.spark_uarm_pose['y'] = y_to_z(data)
+        
+
         x = data.pose.orientation.x
         y = data.pose.orientation.y
         z = data.pose.orientation.z
         w = data.pose.orientation.w
         _, _, yaw = euler_from_quaternion_y_up(x, y, z, w)
         self.spark_uarm_pose['theta'] = yaw
+        
         print("[Spark UArm] x:{:.2f} y:{:.2f} theta:{:.2f}".format(
             self.spark_uarm_pose['x'], 
             self.spark_uarm_pose['y'], 
             self.spark_uarm_pose['theta']
         ))
+        
+
         self.broadcast_position()
 
     def signal_handler(self, sig, frame):
