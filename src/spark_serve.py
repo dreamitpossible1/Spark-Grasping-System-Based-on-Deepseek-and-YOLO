@@ -8,11 +8,12 @@ import select
 import queue
 
 client = OpenAI(
-    api_key="sk-************************",
+    api_key="sk-*****************************",
     base_url="https://api.deepseek.com"
 )
 
 OBJECT_TRANSLATIONS = {
+    # 常见物品
     "杯子": "cup",
     "水杯": "cup",
     "茶杯": "cup",
@@ -84,6 +85,7 @@ messages = [
 2. 回答要自然、友好，像一个真实的助手
 3. 不要提及detected_objects.txt文件或检测状态
 4. 直接告诉用户正在寻找，并会尽力帮助拿取
+
 请用中文对话。"""}
 ]
 
@@ -99,7 +101,7 @@ def read_detected_objects():
             lines = [line.strip() for line in f.readlines()]
             objects_with_coords = []
             for line in lines:
-                if ": Center(" in line:                    
+                if ": Center(" in line:
                     parts = line.split(": Center(")
                     if len(parts) == 2:
                         obj_name = parts[0]
@@ -126,10 +128,12 @@ searching_items = set()
 
 def monitor_detected_objects():
     global found_items, searching_items
+    
     while True:
         try:
             with open("detected_objects.txt", "r") as f:
                 current_lines = [line.strip() for line in f.readlines()]
+            
             current_objects_english = []
             for line in current_lines:
                 if ": Center(" in line:
@@ -137,6 +141,7 @@ def monitor_detected_objects():
                     current_objects_english.append(obj_name)
                 else:
                     current_objects_english.append(line)
+
             for chinese_item in list(searching_items):
                 english_item = translate_to_english(chinese_item)
                 if english_item and english_item in current_objects_english:
@@ -146,11 +151,13 @@ def monitor_detected_objects():
                             if line.startswith(english_item + ": Center("):
                                 coord_info = line
                                 break
+
                         if coord_info:
                             if client_address:
                                 server_socket.sendto(coord_info.encode(), client_address)
                         else:
                             print(f"\n✓ 寻找到 {chinese_item}！")
+                        
                         sys.stdout.flush()
                         found_items.add(chinese_item)
                         searching_items.remove(chinese_item)
@@ -161,10 +168,12 @@ def monitor_detected_objects():
                         
         except FileNotFoundError:
             pass
+        
         time.sleep(0.5)
 
 monitor_thread = threading.Thread(target=monitor_detected_objects, daemon=True)
 monitor_thread.start()
+
 ready_request_queue = queue.Queue()
 
 def udp_ready_listener():
@@ -179,10 +188,12 @@ def udp_ready_listener():
                 for line in detected:
                     if line.startswith(object_name + ": Center("):
                         server_socket.sendto(line.encode(), addr)
+                        print(f"已发送带坐标指令 '{line}' 给客户端 {addr}")
                         found = True
                         break
                 if not found:
                     time.sleep(0.2)
+
 udp_ready_thread = threading.Thread(target=udp_ready_listener, daemon=True)
 udp_ready_thread.start()
 
@@ -192,12 +203,15 @@ while True:
     except KeyboardInterrupt:
         print("\n对话结束。")
         break
+
     if user_input.lower() in ["退出", "exit"]:
         print("对话结束。")
         break
+
     try:
         with open("detected_objects.txt", "r") as f:
             current_lines = [line.strip() for line in f.readlines()]
+
         current_objects_english = []
         for line in current_lines:
             if ": Center(" in line:
@@ -208,18 +222,24 @@ while True:
     except FileNotFoundError:
         current_lines = []
         current_objects_english = []
+
     current_objects_chinese = [translate_to_chinese(obj) for obj in current_objects_english]
+
     context_message = f"""用户的请求是：{user_input}\n当前检测到的物品有：{', '.join(current_objects_chinese) if current_objects_chinese else '没有检测到任何物品'}"""
+
     messages.append({"role": "user", "content": context_message})
     try:
+
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=messages,
             stream=False
         )
+
         assistant_response = response.choices[0].message.content
         messages.append({"role": "assistant", "content": assistant_response})
-        print("\n助手：", assistant_response)
+
+
         found_item = None
         for name in OBJECT_TRANSLATIONS:
             if name in user_input:
@@ -229,6 +249,8 @@ while True:
             english_name = translate_to_english(found_item)
             if client_address:
                 server_socket.sendto(english_name.encode(), client_address)
+                print(f"已发送指令 '{english_name}' 给客户端 {client_address}")
+
     except Exception as e:
         print(f"发生错误：{str(e)}")
         break
