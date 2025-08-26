@@ -1,87 +1,486 @@
+import socket
+import time
+from uarm.wrapper import SwiftAPI
 import rospy
-import geometry_msgs.msg
-from utils import y_to_z, euler_from_quaternion_y_up
+from geometry_msgs.msg import Twist
 import signal
 import sys
-import socket
 import threading
-import time
 import json
+import math
 
-class SparkUarm():
+class TakeUser:
     def __init__(self):
-        rospy.init_node("spark_uarm_node", anonymous=False)
-        rospy.Subscriber('/vrpn_client_node/spark_uarm/pose', geometry_msgs.msg.PoseStamped, self.sparkUarmCallback)
-        self.rate = rospy.Rate(10)  # 10hz
-        
-        self.spark_uarm_pose = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
-        signal.signal(signal.SIGINT, self.signal_handler)
-        
-        self.UDP_IP = "192.168.1.73"
-        self.UDP_PORT = 9091
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.server_socket.bind((self.UDP_IP, self.UDP_PORT))
-        self.client_addresses = set()  
-        
-        self.udp_thread = threading.Thread(target=self.udp_server_thread, daemon=True)
-        self.udp_thread.start()
-        
-        print(f"Spark UArm UDP服务器启动: {self.UDP_IP}:{self.UDP_PORT}")
 
-    def udp_server_thread(self):
-        while True:
-            try:
-                data, client_address = self.server_socket.recvfrom(1024)
-                if client_address not in self.client_addresses:
-                    self.client_addresses.add(client_address)
-                    print(f"新客户端连接: {client_address}")
-            except Exception as e:
-                print(f"UDP服务器错误: {e}")
-                break
-
-    def broadcast_position(self):
-        if self.client_addresses:
-            position_data = json.dumps(self.spark_uarm_pose)
-            for client_addr in list(self.client_addresses):
-                try:
-                    self.server_socket.sendto(position_data.encode(), client_addr)
-                except Exception as e:
-                    print(f"发送位置数据失败 {client_addr}: {e}")
-                    self.client_addresses.discard(client_addr)
-
-    def sparkUarmCallback(self, data):
-        self.spark_uarm_pose['x'], self.spark_uarm_pose['y'] = y_to_z(data)
+        rospy.init_node("take_user_node", anonymous=True)
+        self.vel_pub = rospy.Publisher("/robo5/cmd_vel", Twist, queue_size=10)
+        self.rate = rospy.Rate(10)  # 10Hz
+        
+        self.swift = SwiftAPI(port='/dev/ttyACM0')
+        self.running = True
         
 
-        x = data.pose.orientation.x
-        y = data.pose.orientation.y
-        z = data.pose.orientation.z
-        w = data.pose.orientation.w
-        _, _, yaw = euler_from_quaternion_y_up(x, y, z, w)
-        self.spark_uarm_pose['theta'] = yaw
+        self.ARM_INITIAL_X = 210
+        self.ARM_INITIAL_Y = 0
+        self.ARM_INITIAL_Z = 100
         
-        print("[Spark UArm] x:{:.2f} y:{:.2f} theta:{:.2f}".format(
-            self.spark_uarm_pose['x'], 
-            self.spark_uarm_pose['y'], 
-            self.spark_uarm_pose['theta']
-        ))
+        TARGET_THETA = 1.57
         
-
-        self.broadcast_position()
-
-    def signal_handler(self, sig, frame):
-        print("Signal detected: ", sig, ". Stopping...")
-        self.server_socket.close()
+        self.home_position = {'x': 0.79, 'y': -5.87, 'theta': TARGET_THETA}
+        
+        self.spark_target_positions = {
+            'cell.phone': {'x': 0.74, 'y': -4.80, 'theta': TARGET_THETA},
+            'cup': {'x': 1.30, 'y': -4.89, 'theta': TARGET_THETA},
+            'mouse': {'x': 0.20, 'y': -4.82, 'theta': TARGET_THETA}
+        }
+        
+        self.waiting_for_confirmation = False
+        self.current_action = None
+        self.received_coordinates = None
+    
+    def signal_handler(self, signum, frame):
+        self.running = False
+        self.stop_robot()
+        try:
+            if hasattr(self.swift, 'disconnect'):
+                self.swift.disconnect()
+        except:
+            pass
         sys.exit(0)
+    
+    def stop_robot(self):
+        vel_msg = Twist()
+        vel_msg.linear.x = 0.0
+        vel_msg.angular.z = 0.0
+        self.vel_pub.publish(vel_msg)
 
-    def run(self):
-        print("Spark UArm position monitor started...")
-        while not rospy.is_shutdown():
+
+    def calculate_distance(self, current_pos, target_pos):
+        dx = target_pos['x'] - current_pos['x']
+        dy = target_pos['y'] - current_pos['y']
+        return math.sqrt(dx*dx + dy*dy)
+
+    def calculate_angle_diff(self, current_theta, target_theta):
+        diff = target_theta - current_theta
+        while diff > math.pi:
+            diff -= 2 * math.pi
+        while diff < -math.pi:
+            diff += 2 * math.pi
+        return diff
+
+    def move_to_target(self, target_pos, position_tolerance=0.05, angle_tolerance=0.03, allow_backward=False):
+        print(f"开始移动到目标位置: x:{target_pos['x']:.2f} y:{target_pos['y']:.2f} theta:{target_pos['theta']:.2f}")
+        
+        step1_reached = False
+        step2_reached = False
+        
+        while self.running and not rospy.is_shutdown():
+            current_pos = self.spark_uarm_position.copy()
+            
+            distance = self.calculate_distance(current_pos, target_pos)
+            
+            vel_msg = Twist()
+            
+            if not step1_reached:
+                if distance > position_tolerance:
+                    vel_msg.linear.x = self.move_linear_vel(target_pos, current_pos)
+                    angular_vel = self.move_angular_vel(target_pos, current_pos)
+                    vel_msg.angular.z = max(min(angular_vel, 3), -3)
+                else:
+                    step1_reached = True
+                    print("Step1 完成：到达目标位置")
+            
+            else:
+                angle_dist, angular_vel = self.get_angular_control(target_pos['theta'], current_pos)
+                vel_msg.linear.x = 0
+                vel_msg.angular.z = angular_vel
+                
+                if abs(angle_dist) < angle_tolerance:
+                    vel_msg.linear.x = 0
+                    vel_msg.angular.z = 0
+                    step2_reached = True
+            
+            if step2_reached:
+                self.stop_robot()
+                break
+                
+            self.vel_pub.publish(vel_msg)
             self.rate.sleep()
 
-if __name__ == "__main__":
+    def move_linear_vel(self, goal_pose, current_pos, constant=0.8):
+        return max(min(constant * self.calculate_distance(current_pos, goal_pose), 0.1), -0.1)
+
+    def move_angular_vel(self, goal_pose, self_pose, constant=1):
+        def dotproduct(v1, v2):
+            return sum((a*b) for a, b in zip(v1, v2))
+        def length(v):
+            return math.sqrt(dotproduct(v, v))
+        def angle(v1, v2):
+            return math.acos(dotproduct(v1, v2) / (length(v1) * length(v2)))
+
+        def crossproduct(v1,v2):
+            x1, y1 =v1
+            x2, y2 =v2
+            return x1*y2 -x2*y1
+        """See video: https://www.youtube.com/watch?v=Qh15Nol5htM."""
+        v1 = [math.cos(self_pose['theta']), math.sin(self_pose['theta'])]
+        v2 = [goal_pose['x'] - self_pose['x'], goal_pose['y'] - self_pose['y']]
+        return max(min(constant * math.copysign(angle(v1,v2),crossproduct(v1,v2)), 3), -3)
+
+    def get_angular_control(self, target_theta, current_pose):
+        angle_diff = self.calculate_angle_diff(current_pose['theta'], target_theta)
+        
+        max_angular = 0.2
+        min_angular = 0.02
+        
+        if abs(angle_diff) > 0.3:
+            angular_vel = max_angular if angle_diff > 0 else -max_angular
+        elif abs(angle_diff) > 0.1:
+            angular_vel = max_angular * 0.5 if angle_diff > 0 else -max_angular * 0.5
+        else:
+            angular_vel = max(min_angular, abs(angle_diff) * 0.8)
+            angular_vel = angular_vel if angle_diff > 0 else -angular_vel
+        
+        return angle_diff, angular_vel
+
+    def execute_scissor_action(self):
+        
+        try:
+            target_pos = self.spark_target_positions['cell.phone']
+            self.move_to_target(target_pos)
+            time.sleep(5)
+            client_socket.sendto(f"ready:cell.phone".encode(), server_address)
+            self.waiting_for_confirmation = True
+            self.current_action = "cell.phone"
+            
+            while self.waiting_for_confirmation and self.running:
+                time.sleep(0.1)
+            
+            if not self.running:
+                return
+                
+            print("\n开始机械臂抓取动作")
+            self.swift.connect()
+            time.sleep(1)
+
+            self.swift.set_position(x=self.ARM_INITIAL_X, y=self.ARM_INITIAL_Y, z=self.ARM_INITIAL_Z, wait=True)
+            print("到达初始位置:", self.swift.get_position())
+            time.sleep(0.5)
+            if self.received_coordinates:
+                px, py = self.received_coordinates
+                x, y = map_delta_to_xy(px, py)
+                self.swift.set_position(x=x, y=self.ARM_INITIAL_Y, z=self.ARM_INITIAL_Z, wait=True)
+                time.sleep(0.5)
+                self.swift.set_position(x=x, y=y, z=self.ARM_INITIAL_Z, wait=True)
+                time.sleep(0.5)
+                self.swift.set_position(x=x, y=y, z=-115, wait=True)
+                time.sleep(1)
+
+            self.swift.set_pump(on=True)
+            time.sleep(1)
+            self.swift.set_position(x=210, y=-100, z=50, wait=True)
+            time.sleep(0.5)
+            rotation_position = {'x': 0.74, 'y': -5.87, 'theta': 0.59}
+            self.move_to_target(rotation_position)
+            
+            self.swift.set_position(x=250, y=-150, z=-55, wait=True))
+            time.sleep(0.5)
+            self.swift.set_pump(on=False)
+            time.sleep(0.5)
+            self.swift.set_pump(on=False, timeout=1) 
+            time.sleep(3)
+
+
+            self.swift.set_servo_angle(servo_id=3, angle=90, wait=True)  # 旋转90度
+            time.sleep(0.5)
+            self.swift.set_servo_angle(servo_id=3, angle=0, wait=True)   # 回正
+            time.sleep(0.5)
+            self.swift.set_position(x=210, y=0, z=100, wait=True)
+            time.sleep(0.5)
+            self.swift.disconnect()
+            self.move_to_target(self.home_position)
+            
+            
+        except Exception as e:
+            print(f"执行过程中发生错误: {e}")
+        finally:
+            self.stop_robot()
+
+    def execute_cup_action(self):
+
+        try:
+
+            waypoint = {'x': 0.80, 'y': -5.16, 'theta': 1.51}
+            return_waypoint = {'x': 0.76, 'y': -5.00, 'theta': -1.59}
+            
+            # 先移动到中转点
+            self.move_to_target(waypoint)
+            
+            target_pos =  self.spark_target_positions['cup']
+            
+            self.move_to_target(target_pos)
+            
+            time.sleep(5)
+            client_socket.sendto(f"ready:cup".encode(), server_address)
+            self.waiting_for_confirmation = True
+            self.current_action = "cup"
+
+            while self.waiting_for_confirmation and self.running:
+                time.sleep(0.1)
+            
+            if not self.running:
+                return
+                
+            self.swift.connect()
+            time.sleep(1)
+
+            self.swift.set_position(x=self.ARM_INITIAL_X, y=self.ARM_INITIAL_Y, z=self.ARM_INITIAL_Z, wait=True)
+            time.sleep(0.5)
+            
+            if self.received_coordinates:
+                px, py = self.received_coordinates
+                x, y = map_delta_to_xy(px, py)
+                
+                self.swift.set_position(x=x, y=self.ARM_INITIAL_Y, z=self.ARM_INITIAL_Z, wait=True)
+                time.sleep(0.5)
+                self.swift.set_position(x=x, y=y, z=self.ARM_INITIAL_Z, wait=True))
+                time.sleep(0.5)
+                self.swift.set_position(x=x, y=y, z=-65, wait=True)
+                time.sleep(1)
+
+            self.swift.set_pump(on=True)
+            time.sleep(1)
+
+            self.swift.set_position(x=210, y=-100, z=50, wait=True)
+            time.sleep(0.5)
+            self.move_to_target(return_waypoint)
+            rotation_position = {'x': 0.74, 'y': -5.87, 'theta': 0.59}
+            self.move_to_target(rotation_position)
+            
+            self.swift.set_position(x=250, y=-150, z=0, wait=True)
+            time.sleep(0.5)
+
+            self.swift.set_pump(on=False)
+            time.sleep(0.5)
+            self.swift.set_pump(on=False, timeout=1) 
+            time.sleep(3)
+
+            self.swift.set_servo_angle(servo_id=3, angle=90, wait=True)  
+            time.sleep(0.5)
+            self.swift.set_servo_angle(servo_id=3, angle=0, wait=True)   
+            time.sleep(0.5)
+
+            self.swift.set_position(x=210, y=0, z=100, wait=True)
+            time.sleep(0.5)
+
+            self.swift.disconnect()
+            
+            self.move_to_target(self.home_position)
+            
+        except Exception as e:
+            print(f"执行过程中发生错误: {e}")
+        finally:
+            self.stop_robot()
+
+    def execute_mouse_action(self):
+        try:
+            
+            waypoint = {'x': 0.80, 'y': -5.16, 'theta': 1.51}
+            return_waypoint = {'x': 0.76, 'y': -5.00, 'theta': -1.59}
+            
+            # 先移动到中转点
+            self.move_to_target(waypoint)
+
+            target_pos =  self.spark_target_positions['mouse']
+            print("mouse:",target_pos)
+            
+            self.move_to_target(target_pos)
+            
+            time.sleep(5)
+            client_socket.sendto(f"ready:mouse".encode(), server_address)
+            self.waiting_for_confirmation = True
+            self.current_action = "mouse"
+
+            while self.waiting_for_confirmation and self.running:
+                time.sleep(0.1)
+            
+            if not self.running:
+                return
+                
+            self.swift.connect()
+            time.sleep(1)
+
+            self.swift.set_position(x=self.ARM_INITIAL_X, y=self.ARM_INITIAL_Y, z=self.ARM_INITIAL_Z, wait=True)
+            time.sleep(0.5)
+
+            if self.received_coordinates:
+                px, py = self.received_coordinates
+                x, y = map_delta_to_xy(px, py)
+
+                self.swift.set_position(x=x, y=self.ARM_INITIAL_Y, z=self.ARM_INITIAL_Z, wait=True)
+                time.sleep(0.5)
+                self.swift.set_position(x=x, y=y, z=self.ARM_INITIAL_Z, wait=True)
+                time.sleep(0.5)
+                self.swift.set_position(x=x, y=y, z=self.ARM_INITIAL_Z, wait=True)
+                time.sleep(1)
+
+            self.swift.set_pump(on=True)
+            time.sleep(1)
+
+            self.swift.set_position(x=210, y=-100, z=50, wait=True)
+            time.sleep(0.5)
+            
+            self.move_to_target(return_waypoint)
+            rotation_position = {'x': 0.74, 'y': -5.87, 'theta': 0.59}
+            self.move_to_target(rotation_position)
+            
+            self.swift.set_position(x=250, y=-150, z=-55, wait=True)
+            time.sleep(0.5)
+
+            self.swift.set_pump(on=False)
+            time.sleep(0.5)
+            self.swift.set_pump(on=False, timeout=1) 
+            time.sleep(1)
+            
+            self.swift.set_servo_angle(servo_id=3, angle=90, wait=True)
+            time.sleep(0.5)
+            self.swift.set_servo_angle(servo_id=3, angle=0, wait=True) 
+            time.sleep(0.5)
+
+            self.swift.set_position(x=210, y=0, z=100, wait=True)
+            time.sleep(0.5)
+
+            self.swift.disconnect()
+            self.move_to_target(self.home_position)
+        
+        except Exception as e:
+            print(f"执行过程中发生错误: {e}")
+        finally:
+            self.stop_robot()
+
+def linear_map(val, src_min, src_max, dst_min, dst_max):
+    if src_max == src_min:
+        return (dst_min + dst_max) / 2
+    return dst_min + (val - src_min) * (dst_max - dst_min) / (src_max - src_min)
+
+def map_delta_to_xy(dy, dx):
+    x = 426 - 0.4761904762 * dx
+    y = 143.7 - 0.3666666667 * dy
+    print(f"map_delta_to_xy: dy={dy}, dx={dx} => x={x}, y={y}")
+    return x, y
+
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server_address = ("192.168.1.26", 9090)
+
+uarm_client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+uarm_server_address = ("192.168.1.73", 9091)
+
+client_socket.sendto("Hello, UDP Server!".encode(), server_address)
+uarm_client_socket.sendto("Hello, Spark UArm Server!".encode(), uarm_server_address)
+
+take_user = TakeUser()
+
+signal.signal(signal.SIGINT, take_user.signal_handler)
+signal.signal(signal.SIGTERM, take_user.signal_handler)
+
+def uarm_position_listener():
+    while take_user.running:
+        try:
+            uarm_client_socket.settimeout(1.0)
+            data, _ = uarm_client_socket.recvfrom(1024)
+            position_data = json.loads(data.decode())
+            take_user.spark_uarm_position = position_data
+        except socket.timeout:
+            continue
+        except Exception as e:
+            if take_user.running:
+                print(f"接收UArm位置数据错误: {e}")
+            break
+            
+uarm_thread = threading.Thread(target=uarm_position_listener, daemon=True)
+uarm_thread.start()
+
+def udp_message_listener():
+
+    while take_user.running:
+        try:
+            client_socket.settimeout(1.0)
+            data, _ = client_socket.recvfrom(1024)
+            msg = data.decode().strip()
+            
+            if not take_user.running:
+                break
+            
+            object_name = None
+            coordinates = None
+            
+            if ": Center(" in msg:
+                parts = msg.split(": Center(")
+                if len(parts) == 2:
+                    object_name = parts[0]
+                    coord_str = parts[1].rstrip(")")
+                    try:
+                        x, y = map(int, coord_str.split(", "))
+                        coordinates = (x, y)
+                        print(f"收到{object_name}位置信息：({x}, {y})，开始抓取")
+                        
+                        if take_user.waiting_for_confirmation and take_user.current_action == object_name:
+                            take_user.received_coordinates = coordinates
+                            take_user.waiting_for_confirmation = False
+                            print(f"✓ 收到服务端确认，{object_name}位置：({x}, {y})，继续执行抓取")
+                        elif not take_user.waiting_for_confirmation:
+                            if object_name == "cup":
+                                print("执行：抓取杯子的动作！")
+                                threading.Thread(target=take_user.execute_cup_action, daemon=True).start()
+                            elif object_name == "cell.phone":
+                                print("执行：抓取手机(cell.phone)的动作！")
+                                threading.Thread(target=take_user.execute_scissor_action, daemon=True).start()
+                            elif object_name == "mouse":
+                                print("执行：抓取鼠标的动作！")
+                                threading.Thread(target=take_user.execute_mouse_action, daemon=True).start()
+                        
+                    except ValueError:
+                        print(f"坐标解析失败: {coord_str}")
+                        object_name = parts[0] 
+            else:
+                object_name = msg
+                print(f"收到{object_name}指令，开始抓取")
+                
+                if object_name == "cup":
+                    print("执行：抓取杯子的动作！")
+                    threading.Thread(target=take_user.execute_cup_action, daemon=True).start()
+                elif object_name == "cell.phone":
+                    print("执行：抓取手机(cell.phone)的动作！")
+                    threading.Thread(target=take_user.execute_scissor_action, daemon=True).start()
+                elif object_name == "mouse":
+                    print("执行：抓取鼠标的动作！")
+                    threading.Thread(target=take_user.execute_mouse_action, daemon=True).start()
+                else:
+                    print("收到未知指令，忽略。")
+            
+        except socket.timeout:
+            continue
+        except Exception as e:
+            if take_user.running:
+                print(f"接收消息时发生错误: {e}")
+            break
+
+udp_thread = threading.Thread(target=udp_message_listener, daemon=True)
+udp_thread.start()
+
+try:
+    while take_user.running:
+        time.sleep(0.1) 
+        
+except KeyboardInterrupt:
+    print("程序被中断。")
+finally:
+    take_user.running = False
+    take_user.stop_robot()
     try:
-        spark_uarm = SparkUarm()
-        spark_uarm.run()
-    except rospy.ROSInterruptException:
-        print("Program interrupted")
+        take_user.swift.disconnect()
+    except:
+        pass
+    client_socket.close()
+    uarm_client_socket.close()
+    print("客户端已安全退出。")
